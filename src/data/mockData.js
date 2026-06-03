@@ -1,0 +1,129 @@
+export const ROUTES = [
+  { id: '0', name: 'Route 0', shortName: '0', color: '#E74C3C', type: 'bus', description: 'Civic Center - Auraria' },
+  { id: '1', name: 'Route 1', shortName: '1', color: '#3498DB', type: 'bus', description: 'Colfax - Downtown' },
+  { id: '15', name: 'Route 15', shortName: '15', color: '#2ECC71', type: 'bus', description: 'Colfax Ave' },
+  { id: '16', name: 'Route 16', shortName: '16', color: '#9B59B6', type: 'bus', description: '16th St Mall Shuttle', isFree: true },
+  { id: '21', name: 'Route 21', shortName: '21', color: '#F39C12', type: 'bus', description: 'Hamden Ave' },
+  { id: 'W', name: 'W Line', shortName: 'W', color: '#1ABC9C', type: 'light-rail', description: 'West Corridor - Lakewood/Wadsworth' },
+  { id: 'E', name: 'E Line', shortName: 'E', color: '#E67E22', type: 'light-rail', description: 'Southeast - Aurora' },
+  { id: 'A', name: 'A Line', shortName: 'A', color: '#8E44AD', type: 'commuter-rail', description: 'University of Colorado A Line - DIA' },
+  { id: 'N', name: 'N Line', shortName: 'N', color: '#2980B9', type: 'commuter-rail', description: 'North Metro - Thornton' },
+  { id: 'FF1', name: 'Flatiron Flyer 1', shortName: 'FF1', color: '#C0392B', type: 'bus-rapid-transit', description: 'Boulder - Denver' },
+];
+
+export const ALERTS = [
+  {
+    id: 1,
+    severity: 'warning',
+    route: '15',
+    title: 'Detour on Colfax Ave',
+    description: 'Route 15 is on detour between Broadway and Speer Blvd due to road construction. Expect 5–10 min delays.',
+    time: '2026-05-18T08:00:00',
+  },
+  {
+    id: 2,
+    severity: 'info',
+    route: 'A',
+    title: 'Reduced service – A Line',
+    description: 'A Line operating every 30 minutes on weekends due to track maintenance near Peña Station.',
+    time: '2026-05-18T06:00:00',
+  },
+  {
+    id: 3,
+    severity: 'success',
+    route: 'W',
+    title: 'W Line back to normal',
+    description: 'All delays on the W Line have been resolved. Service is running on schedule.',
+    time: '2026-05-18T09:30:00',
+  },
+];
+
+export const STOPS = [
+  { id: 'S1', name: 'Union Station', lat: 39.7527, lon: -104.9993, routes: ['W', 'E', 'A', 'N', '0', '15', '16'] },
+  { id: 'S2', name: 'Civic Center', lat: 39.7388, lon: -104.9847, routes: ['0', '1', '15', '16', '21'] },
+  { id: 'S3', name: '16th & California', lat: 39.7459, lon: -104.9924, routes: ['16'] },
+  { id: 'S4', name: 'Denver Airport (DEN)', lat: 39.8561, lon: -104.6737, routes: ['A'] },
+  { id: 'S5', name: 'Auraria Campus', lat: 39.7452, lon: -105.0066, routes: ['W', '0'] },
+  { id: 'S6', name: 'Lakewood/Wadsworth', lat: 39.7129, lon: -105.0804, routes: ['W'] },
+  { id: 'S7', name: 'Colfax & Broadway', lat: 39.7403, lon: -104.9871, routes: ['15', '1'] },
+];
+
+export const VEHICLES = [
+  { id: 'V1', routeId: 'A', lat: 39.7800, lon: -104.8500, heading: 90, speed: 45, nextStop: 'Peña Station', delay: 0 },
+  { id: 'V2', routeId: 'W', lat: 39.7300, lon: -105.0400, heading: 270, speed: 35, nextStop: 'Lamar Station', delay: 2 },
+  { id: 'V3', routeId: '15', lat: 39.7404, lon: -104.9700, heading: 90, speed: 20, nextStop: 'Colfax & Josephine', delay: 5 },
+  { id: 'V4', routeId: '16', lat: 39.7455, lon: -104.9940, heading: 0, speed: 10, nextStop: '16th & Larimer', delay: 0 },
+  { id: 'V5', routeId: 'E', lat: 39.7200, lon: -104.9000, heading: 315, speed: 40, nextStop: 'Nine Mile Station', delay: 0 },
+];
+
+export const POPULAR_LOCATIONS = [
+  { name: 'Union Station', address: '1701 Wynkoop St, Denver, CO 80202' },
+  { name: 'Denver International Airport', address: '8500 Peña Blvd, Denver, CO 80249' },
+  { name: 'Civic Center', address: 'Civic Center Park, Denver, CO 80203' },
+  { name: 'Auraria Campus', address: '1200 Larimer St, Denver, CO 80204' },
+  { name: 'Cherry Creek Shopping Center', address: '3000 E 1st Ave, Denver, CO 80206' },
+  { name: 'Coors Field', address: '2001 Blake St, Denver, CO 80205' },
+];
+
+export const PARK_AND_RIDE = [
+  {
+    id: 'PR1',
+    name: 'Lakewood/Wadsworth P&R',
+    routeIds: ['W'],
+    address: '7200 W Colfax Ave, Lakewood, CO',
+    spaces: 850,
+    freeSpaces: 214,
+    cost: 'Free',
+    lat: 39.7410, lon: -105.0826,
+  },
+  {
+    id: 'PR2',
+    name: 'Nine Mile Station P&R',
+    routeIds: ['E'],
+    address: '3299 S Parker Rd, Aurora, CO',
+    spaces: 1200,
+    freeSpaces: 88,
+    cost: 'Free',
+    lat: 39.6517, lon: -104.8322,
+  },
+  {
+    id: 'PR3',
+    name: 'Lincoln Station P&R',
+    routeIds: ['E'],
+    address: '8001 E Caley Ave, Centennial, CO',
+    spaces: 650,
+    freeSpaces: 302,
+    cost: 'Free',
+    lat: 39.6210, lon: -104.8963,
+  },
+  {
+    id: 'PR4',
+    name: 'Peña Station P&R',
+    routeIds: ['A'],
+    address: '6200 N Himalaya Rd, Denver, CO',
+    spaces: 400,
+    freeSpaces: 175,
+    cost: 'Free',
+    lat: 39.8268, lon: -104.7132,
+  },
+  {
+    id: 'PR5',
+    name: 'Thornton P&R',
+    routeIds: ['N'],
+    address: '900 E 144th Ave, Thornton, CO',
+    spaces: 500,
+    freeSpaces: 220,
+    cost: 'Free',
+    lat: 39.9155, lon: -104.9608,
+  },
+  {
+    id: 'PR6',
+    name: 'Flatiron Park & Ride (Boulder)',
+    routeIds: ['FF1'],
+    address: 'Flatiron Crossing Dr, Broomfield, CO',
+    spaces: 300,
+    freeSpaces: 140,
+    cost: 'Free',
+    lat: 39.9370, lon: -105.1262,
+  },
+];
