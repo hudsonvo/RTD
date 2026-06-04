@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { Navigation, MapPin, Map, AlertTriangle, Clock, Bus, Train, Zap, Star, ArrowRight } from 'lucide-react'
-import { ALERTS, ROUTES, VEHICLES } from '../data/mockData'
+import { ROUTES } from '../data/mockData'
 import { useFavorites } from '../hooks/useFavorites'
+import { useVehiclePositions, useAlerts } from '../hooks/useRTDFeeds'
 
 const ROUTE_TYPE_ICON = {
   'bus': Bus,
@@ -17,8 +18,10 @@ const SEVERITY_STYLES = {
 }
 
 export default function Dashboard() {
-  const recentAlerts = ALERTS.slice(0, 2)
-  const liveVehicles = VEHICLES.slice(0, 4)
+  const { vehicles, loading: vehiclesLoading } = useVehiclePositions()
+  const { alerts, loading: alertsLoading } = useAlerts()
+  const recentAlerts = (alerts ?? []).slice(0, 2)
+  const liveVehicles = (vehicles ?? []).slice(0, 4)
   const { favorites } = useFavorites()
 
   return (
@@ -63,7 +66,7 @@ export default function Dashboard() {
           { to: '/tracker', icon: MapPin, label: 'Live Tracker', color: 'bg-green-600', desc: 'Track vehicles' },
           { to: '/stops', icon: Clock, label: 'Stop Finder', color: 'bg-teal-600', desc: 'Arrivals board' },
           { to: '/routes', icon: Map, label: 'Browse Routes', color: 'bg-purple-600', desc: 'Schedules & stops' },
-          { to: '/alerts', icon: AlertTriangle, label: 'Service Alerts', color: 'bg-orange-500', desc: `${ALERTS.length} active` },
+          { to: '/alerts', icon: AlertTriangle, label: 'Service Alerts', color: 'bg-orange-500', desc: alerts ? `${alerts.length} active` : 'Live alerts' },
         ].map(({ to, icon: Icon, label, color, desc }) => (
           <Link
             key={to}
@@ -92,7 +95,9 @@ export default function Dashboard() {
             <Link to="/tracker" className="text-blue-600 text-sm hover:underline">View map →</Link>
           </div>
           <div className="space-y-2">
-            {liveVehicles.map((v) => {
+            {vehiclesLoading && !vehicles ? (
+              <div className="text-sm text-gray-400 py-4 text-center">Loading vehicles…</div>
+            ) : liveVehicles.map((v) => {
               const route = ROUTES.find(r => r.id === v.routeId)
               const Icon = ROUTE_TYPE_ICON[route?.type] || Bus
               return (
@@ -101,13 +106,13 @@ export default function Dashboard() {
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                     style={{ backgroundColor: route?.color || '#666' }}
                   >
-                    {route?.shortName}
+                    {route?.shortName ?? v.routeId}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{route?.name}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate">{route?.name ?? `Route ${v.routeId}`}</div>
                     <div className="text-xs text-gray-500 flex items-center gap-1">
                       <Clock size={11} />
-                      Next: {v.nextStop}
+                      Next: {v.nextStopName ?? v.nextStop ?? '—'}
                     </div>
                   </div>
                   <div className={`text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -128,7 +133,11 @@ export default function Dashboard() {
             <Link to="/alerts" className="text-blue-600 text-sm hover:underline">All alerts →</Link>
           </div>
           <div className="space-y-2">
-            {recentAlerts.map((alert) => (
+            {alertsLoading && !alerts ? (
+              <div className="text-sm text-gray-400 py-4 text-center">Loading alerts…</div>
+            ) : recentAlerts.length === 0 ? (
+              <div className="text-sm text-gray-400 py-4 text-center">No active alerts</div>
+            ) : recentAlerts.map((alert) => (
               <div
                 key={alert.id}
                 className={`p-3 rounded-lg border text-sm ${SEVERITY_STYLES[alert.severity]}`}
@@ -167,20 +176,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* API notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-        <strong>Developer note:</strong> This app is running on mock data. To connect to live RTD feeds, get your API key at{' '}
-        <a
-          href="https://www.rtd-denver.com/developer-resources"
-          target="_blank"
-          rel="noreferrer"
-          className="underline font-medium"
-        >
-          rtd-denver.com/developer-resources
-        </a>
-        {' '}and add your key to <code className="bg-blue-100 px-1 rounded">.env</code> as{' '}
-        <code className="bg-blue-100 px-1 rounded">VITE_RTD_API_KEY</code>.
-      </div>
     </div>
   )
 }
