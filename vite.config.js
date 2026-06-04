@@ -11,6 +11,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: path => path.replace(/^\/api\/gtfs-rt/, '/files/gtfs-rt'),
       },
+      '/api/otp': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/api\/otp/, ''),
+      },
       '/api/geocode': {
         target: 'https://nominatim.openstreetmap.org',
         changeOrigin: true,

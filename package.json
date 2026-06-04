@@ -8,7 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "update-gtfs": "node scripts/fetch-gtfs-static.js"
+    "update-gtfs": "node scripts/fetch-gtfs-static.js",
+    "otp:setup": "bash scripts/setup-otp.sh",
+    "otp:build": "bash scripts/build-otp.sh",
+    "otp:serve": "bash scripts/run-otp.sh"
   },
   "dependencies": {
     "gtfs-realtime-bindings": "^2.0.0",

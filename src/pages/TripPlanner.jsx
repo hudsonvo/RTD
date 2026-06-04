@@ -1,82 +1,30 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Navigation, Clock, ArrowRight, RotateCcw, MapPin,
-  Bus, Train, Zap, Car, ParkingSquare, Footprints, Search, X,
+  Bus, Train, Zap, Car, ParkingSquare, Footprints, X, AlertCircle,
 } from 'lucide-react'
-import { POPULAR_LOCATIONS, ROUTES, PARK_AND_RIDE } from '../data/mockData'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const TRANSIT_ONLY_TRIPS = [
-  {
-    id: 1, duration: '32 min', departure: '10:15 AM', arrival: '10:47 AM',
-    legs: [
-      { type: 'walk', desc: 'Walk to Union Station', time: '5 min' },
-      { type: 'transit', routeId: 'A', desc: 'A Line toward DIA', stops: 4, time: '22 min' },
-      { type: 'walk', desc: 'Walk to destination', time: '5 min' },
-    ],
-  },
-  {
-    id: 2, duration: '48 min', departure: '10:18 AM', arrival: '11:06 AM',
-    legs: [
-      { type: 'walk', desc: 'Walk to 16th & California', time: '3 min' },
-      { type: 'transit', routeId: '16', desc: '16th St Mall Shuttle (free)', stops: 6, time: '12 min' },
-      { type: 'transit', routeId: '15', desc: 'Route 15 toward East Colfax', stops: 8, time: '28 min' },
-      { type: 'walk', desc: 'Walk to destination', time: '5 min' },
-    ],
-  },
-]
-
-const DRIVE_TRANSIT_TRIPS = [
-  {
-    id: 1, duration: '41 min', departure: '10:05 AM', arrival: '10:46 AM', parkAndRideId: 'PR1',
-    legs: [
-      { type: 'drive', desc: 'Drive to Lakewood/Wadsworth P&R', time: '12 min', distance: '5.2 mi' },
-      { type: 'park', parkAndRideId: 'PR1', desc: 'Park at Lakewood/Wadsworth P&R', time: '3 min' },
-      { type: 'transit', routeId: 'W', desc: 'W Line toward Union Station', stops: 7, time: '21 min' },
-      { type: 'walk', desc: 'Walk to destination', time: '5 min' },
-    ],
-  },
-  {
-    id: 2, duration: '55 min', departure: '10:00 AM', arrival: '10:55 AM', parkAndRideId: 'PR2',
-    legs: [
-      { type: 'drive', desc: 'Drive to Nine Mile Station P&R', time: '18 min', distance: '8.7 mi' },
-      { type: 'park', parkAndRideId: 'PR2', desc: 'Park at Nine Mile Station P&R', time: '3 min' },
-      { type: 'transit', routeId: 'E', desc: 'E Line toward Downtown Denver', stops: 9, time: '29 min' },
-      { type: 'walk', desc: 'Walk to destination', time: '5 min' },
-    ],
-  },
-  {
-    id: 3, duration: '38 min', departure: '10:08 AM', arrival: '10:46 AM', parkAndRideId: 'PR4',
-    legs: [
-      { type: 'drive', desc: 'Drive to Peña Station P&R', time: '9 min', distance: '3.8 mi' },
-      { type: 'park', parkAndRideId: 'PR4', desc: 'Park at Peña Station P&R', time: '3 min' },
-      { type: 'transit', routeId: 'A', desc: 'A Line toward Union Station / DIA', stops: 5, time: '21 min' },
-      { type: 'walk', desc: 'Walk to destination', time: '5 min' },
-    ],
-  },
-]
+import { ROUTES, PARK_AND_RIDE, POPULAR_LOCATIONS } from '../data/mockData'
+import { planTrip, formatItinerary } from '../api/otp'
 
 const ROUTE_TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
 const MODES = [
   { id: 'transit', label: 'Transit only', icon: Bus },
   { id: 'drive-transit', label: 'Drive + Transit', icon: Car },
 ]
+const TIME_MODES = [
+  { id: 'now', label: 'Now' },
+  { id: 'leave-at', label: 'Leave at' },
+  { id: 'arrive-by', label: 'Arrive by' },
+]
 
-// ── Geocoding ─────────────────────────────────────────────────────────────────
+// ── Geocoding ──────────────────────────────────────────────────────────────────
 
 async function geocode(query) {
   const params = new URLSearchParams({
-    q: query,
-    format: 'json',
-    limit: '6',
-    countrycodes: 'us',
-    viewbox: '-105.5,39.4,-104.4,40.2',
-    bounded: '0',
+    q: query, format: 'json', limit: '6',
+    countrycodes: 'us', viewbox: '-105.5,39.4,-104.4,40.2', bounded: '0',
   })
-  const res = await fetch(`/api/geocode/search?${params}`, {
-    headers: { 'Accept-Language': 'en' },
-  })
+  const res = await fetch(`/api/geocode/search?${params}`, { headers: { 'Accept-Language': 'en' } })
   if (!res.ok) return []
   const data = await res.json()
   return data.map(r => ({
@@ -84,19 +32,17 @@ async function geocode(query) {
     full: r.display_name,
     lat: parseFloat(r.lat),
     lon: parseFloat(r.lon),
-    type: r.type,
   }))
 }
 
-// ── AddressInput ──────────────────────────────────────────────────────────────
+// ── AddressInput ───────────────────────────────────────────────────────────────
 
-function AddressInput({ value, onChange, placeholder, pinColor, onClear }) {
+function AddressInput({ value, onChange, onSelect, placeholder, pinColor, onClear }) {
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const debounceRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Close on outside click
   useEffect(() => {
     function handler(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
@@ -119,6 +65,7 @@ function AddressInput({ value, onChange, placeholder, pinColor, onClear }) {
 
   function pick(suggestion) {
     onChange(suggestion.label)
+    onSelect?.(suggestion)
     setSuggestions([])
     setOpen(false)
   }
@@ -143,7 +90,6 @@ function AddressInput({ value, onChange, placeholder, pinColor, onClear }) {
           <X size={13} />
         </button>
       )}
-
       {open && suggestions.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
           {suggestions.map((s, i) => (
@@ -166,95 +112,18 @@ function AddressInput({ value, onChange, placeholder, pinColor, onClear }) {
   )
 }
 
-// ── TimeSelector ──────────────────────────────────────────────────────────────
-
-const TIME_MODES = [
-  { id: 'now', label: 'Now' },
-  { id: 'leave-at', label: 'Leave at' },
-  { id: 'arrive-by', label: 'Arrive by' },
-]
-
-function TimeSelector() {
-  const [mode, setMode] = useState('now')
-  const [datetime, setDatetime] = useState(() => {
-    // Default to current time rounded to nearest 5 min
-    const d = new Date()
-    d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0)
-    return d.toISOString().slice(0, 16)
-  })
-
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {/* Mode pill group */}
-      <div className="flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
-        {TIME_MODES.map(m => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => setMode(m.id)}
-            className={`px-3 py-2 text-sm font-medium transition-colors ${
-              mode === m.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {mode !== 'now' && (
-        <input
-          type="datetime-local"
-          value={datetime}
-          onChange={e => setDatetime(e.target.value)}
-          className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      )}
-    </div>
-  )
-}
-
-// ── Trip result components ────────────────────────────────────────────────────
-
-function ParkAndRideBadge({ parkAndRideId }) {
-  const pr = PARK_AND_RIDE.find(p => p.id === parkAndRideId)
-  if (!pr) return null
-  const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
-  const availColor = pct > 30 ? 'text-green-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
-  const barColor = pct > 30 ? 'bg-green-500' : pct > 10 ? 'bg-yellow-500' : 'bg-red-500'
-  const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
-  return (
-    <div className="mt-2 ml-10 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-xs space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-700">{pr.name}</span>
-        <span className="text-slate-400">{pr.cost} parking</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className={`font-medium ${availColor}`}>{pr.freeSpaces} of {pr.spaces} spaces free</span>
-      </div>
-      <div className="flex gap-1 flex-wrap">
-        {routes.map(r => (
-          <span key={r.id} className="px-1.5 py-0.5 rounded text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
-            {r.shortName}
-          </span>
-        ))}
-        <span className="text-slate-400 ml-0.5">lines available here</span>
-      </div>
-    </div>
-  )
-}
+// ── TripLeg ────────────────────────────────────────────────────────────────────
 
 function TripLeg({ leg, isLast }) {
-  const route = leg.routeId ? ROUTES.find(r => r.id === leg.routeId) : null
-  const TransitIcon = route ? (ROUTE_TYPE_ICON[route.type] || Bus) : null
+  const knownRoute = leg.routeId ? ROUTES.find(r => r.id === leg.routeId || r.shortName === leg.routeId) : null
+  const color = leg.routeColor || knownRoute?.color || '#3B82F6'
+  const routeType = leg.routeType || knownRoute?.type || 'bus'
+  const TransitIcon = ROUTE_TYPE_ICON[routeType] || Bus
+
   let iconBg = '#9CA3AF', Icon = Footprints
   if (leg.type === 'drive') { iconBg = '#374151'; Icon = Car }
   else if (leg.type === 'park') { iconBg = '#6366F1'; Icon = ParkingSquare }
-  else if (leg.type === 'transit') { iconBg = route?.color || '#3B82F6'; Icon = TransitIcon || Bus }
+  else if (leg.type === 'transit') { iconBg = color; Icon = TransitIcon }
 
   return (
     <div className="flex gap-3">
@@ -268,20 +137,24 @@ function TripLeg({ leg, isLast }) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <span className="text-sm text-gray-900">{leg.desc}</span>
-            {leg.type === 'transit' && leg.stops && <span className="ml-1.5 text-xs text-gray-400">{leg.stops} stops</span>}
-            {leg.type === 'drive' && leg.distance && <span className="ml-1.5 text-xs text-gray-400">{leg.distance}</span>}
+            {leg.type === 'transit' && leg.stops > 0 && (
+              <span className="ml-1.5 text-xs text-gray-400">{leg.stops} stops</span>
+            )}
+            {leg.type === 'drive' && leg.distance && (
+              <span className="ml-1.5 text-xs text-gray-400">{leg.distance}</span>
+            )}
           </div>
           <span className="text-xs text-gray-400 shrink-0">{leg.time}</span>
         </div>
-        {leg.type === 'park' && <ParkAndRideBadge parkAndRideId={leg.parkAndRideId} />}
       </div>
     </div>
   )
 }
 
+// ── TripCard ───────────────────────────────────────────────────────────────────
+
 function TripCard({ trip }) {
   const [expanded, setExpanded] = useState(false)
-  const pr = trip.parkAndRideId ? PARK_AND_RIDE.find(p => p.id === trip.parkAndRideId) : null
   const transitLegs = trip.legs.filter(l => l.type === 'transit')
 
   return (
@@ -292,12 +165,14 @@ function TripCard({ trip }) {
       >
         <div className="flex items-center gap-1 shrink-0">
           {trip.legs.filter(l => ['drive', 'transit'].includes(l.type)).map((leg, i) => {
-            const route = leg.routeId ? ROUTES.find(r => r.id === leg.routeId) : null
-            const LegIcon = leg.type === 'drive' ? Car : (route ? ROUTE_TYPE_ICON[route.type] || Bus : Bus)
+            const knownRoute = leg.routeId ? ROUTES.find(r => r.id === leg.routeId || r.shortName === leg.routeId) : null
+            const legColor = leg.routeColor || knownRoute?.color || (leg.type === 'drive' ? '#374151' : '#3B82F6')
+            const routeType = leg.routeType || knownRoute?.type || 'bus'
+            const LegIcon = leg.type === 'drive' ? Car : (ROUTE_TYPE_ICON[routeType] || Bus)
             return (
               <div key={i} className="flex items-center gap-0.5">
                 {i > 0 && <ArrowRight size={10} className="text-gray-300" />}
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: leg.type === 'drive' ? '#374151' : route?.color || '#3B82F6' }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: legColor }}>
                   <LegIcon size={11} />
                 </div>
               </div>
@@ -307,10 +182,14 @@ function TripCard({ trip }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-900">{trip.duration}</span>
-            {pr && <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">Park at {pr.name.replace(' P&R', '')}</span>}
-            {transitLegs.map(l => {
-              const r = ROUTES.find(r => r.id === l.routeId)
-              return r ? <span key={l.routeId} className="text-xs text-white px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: r.color }}>{r.shortName}</span> : null
+            {transitLegs.map((l, i) => {
+              const knownRoute = l.routeId ? ROUTES.find(r => r.id === l.routeId || r.shortName === l.routeId) : null
+              const badgeColor = l.routeColor || knownRoute?.color || '#3B82F6'
+              return l.routeId ? (
+                <span key={i} className="text-xs text-white px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: badgeColor }}>
+                  {l.routeId}
+                </span>
+              ) : null
             })}
           </div>
         </div>
@@ -327,28 +206,66 @@ function TripCard({ trip }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function TripPlanner() {
   const [from, setFrom] = useState('')
+  const [fromCoords, setFromCoords] = useState(null)
   const [to, setTo] = useState('')
+  const [toCoords, setToCoords] = useState(null)
   const [mode, setMode] = useState('transit')
+  const [timeMode, setTimeMode] = useState('now')
+  const [datetime, setDatetime] = useState(() => {
+    const d = new Date()
+    d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0)
+    return d.toISOString().slice(0, 16)
+  })
   const [trips, setTrips] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-  function handleSearch(e) {
+  async function handleSearch(e) {
     e.preventDefault()
     if (!from || !to) return
     setLoading(true)
-    setTimeout(() => {
-      setTrips(mode === 'drive-transit' ? DRIVE_TRANSIT_TRIPS : TRANSIT_ONLY_TRIPS)
+    setError(null)
+    setTrips(null)
+
+    try {
+      // Resolve coords: use picked suggestion coords or geocode the raw string
+      let fCoords = fromCoords
+      let tCoords = toCoords
+      if (!fCoords) {
+        const results = await geocode(from)
+        if (!results.length) throw new Error(`Could not find location: "${from}"`)
+        fCoords = results[0]
+      }
+      if (!tCoords) {
+        const results = await geocode(to)
+        if (!results.length) throw new Error(`Could not find location: "${to}"`)
+        tCoords = results[0]
+      }
+
+      const itineraries = await planTrip({
+        fromLat: fCoords.lat, fromLon: fCoords.lon,
+        toLat: tCoords.lat, toLon: tCoords.lon,
+        numItineraries: 3,
+        dateTime: timeMode === 'now' ? null : datetime,
+        arriveBy: timeMode === 'arrive-by',
+        driveTransit: mode === 'drive-transit',
+      })
+
+      setTrips(itineraries.map(formatItinerary))
+    } catch (err) {
+      setError(err.message)
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   function handleSwap() {
-    setFrom(to)
-    setTo(from)
+    setFrom(to); setFromCoords(toCoords)
+    setTo(from); setToCoords(fromCoords)
     setTrips(null)
   }
 
@@ -384,15 +301,17 @@ export default function TripPlanner() {
           <div className="flex-1 space-y-2">
             <AddressInput
               value={from}
-              onChange={v => { setFrom(v); setTrips(null) }}
-              onClear={() => { setFrom(''); setTrips(null) }}
+              onChange={v => { setFrom(v); setFromCoords(null); setTrips(null) }}
+              onSelect={s => setFromCoords(s)}
+              onClear={() => { setFrom(''); setFromCoords(null); setTrips(null) }}
               placeholder="From: address or stop name"
               pinColor="text-green-500"
             />
             <AddressInput
               value={to}
-              onChange={v => { setTo(v); setTrips(null) }}
-              onClear={() => { setTo(''); setTrips(null) }}
+              onChange={v => { setTo(v); setToCoords(null); setTrips(null) }}
+              onSelect={s => setToCoords(s)}
+              onClear={() => { setTo(''); setToCoords(null); setTrips(null) }}
               placeholder="To: address or stop name"
               pinColor="text-red-500"
             />
@@ -409,7 +328,28 @@ export default function TripPlanner() {
 
         {/* Time selector + search */}
         <div className="flex gap-2 items-center flex-wrap">
-          <TimeSelector />
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
+            {TIME_MODES.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setTimeMode(m.id)}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${
+                  timeMode === m.id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {timeMode !== 'now' && (
+            <input
+              type="datetime-local"
+              value={datetime}
+              onChange={e => setDatetime(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
           <button
             type="submit"
             disabled={!from || !to || loading}
@@ -427,7 +367,7 @@ export default function TripPlanner() {
               <button
                 key={loc.name}
                 type="button"
-                onClick={() => { setTo(loc.name); setTrips(null) }}
+                onClick={() => { setTo(loc.address); setToCoords(null); setTrips(null) }}
                 className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors"
               >
                 {loc.name}
@@ -437,11 +377,11 @@ export default function TripPlanner() {
         </div>
       </form>
 
-      {/* Park & ride panel */}
-      {mode === 'drive-transit' && !trips && (
+      {/* Park & ride panel (drive-transit, pre-search) */}
+      {mode === 'drive-transit' && !trips && !loading && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
           <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2 mb-2">
-            <ParkingSquare size={15} />Nearby Park & Ride locations
+            <ParkingSquare size={15} />Nearby Park &amp; Ride locations
           </h2>
           <div className="grid sm:grid-cols-2 gap-2">
             {PARK_AND_RIDE.slice(0, 4).map(pr => {
@@ -465,16 +405,19 @@ export default function TripPlanner() {
         </div>
       )}
 
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-red-800">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Results */}
       {trips && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-500">{trips.length} options found — click a result to expand the full route</p>
+          <p className="text-sm text-gray-500">{trips.length} option{trips.length !== 1 ? 's' : ''} found — click a result to expand the full route</p>
           {trips.map(trip => <TripCard key={trip.id} trip={trip} />)}
-          <p className="text-xs text-gray-400 text-center pt-1">
-            Results are simulated. Connect to{' '}
-            <a href="https://www.rtd-denver.com/developer-resources" target="_blank" rel="noreferrer" className="underline">RTD's real-time API</a>
-            {' '}+ a routing engine (e.g. OpenTripPlanner) for live results.
-          </p>
         </div>
       )}
     </div>

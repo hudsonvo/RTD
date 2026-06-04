@@ -20,6 +20,9 @@ dist-ssr
 # Claude Code local session data
 .claude/
 
+# OpenTripPlanner — large binaries, not for version control
+otp-data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
