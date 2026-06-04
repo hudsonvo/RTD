@@ -132,7 +132,7 @@ export default function Routes() {
                         </div>
                       </div>
                       <a
-                        href={`https://www.rtd-denver.com/routes-and-schedules/route/${route.id}`}
+                        href={`https://app.rtd-denver.com/route/${route.id}/schedule`}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-3 inline-block text-xs text-blue-600 hover:underline"
