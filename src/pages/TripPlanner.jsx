@@ -17,6 +17,35 @@ const TIME_MODES = [
   { id: 'arrive-by', label: 'Arrive by' },
 ]
 
+// ── Geometry helpers ──────────────────────────────────────────────────────────
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+// Returns P&R locations sorted by how "on the way" they are.
+// A station qualifies if routing origin→PR→dest adds ≤40% over the direct distance
+// and the PR is closer to the origin than to the destination.
+function getSuggestedParkAndRides(fromLat, fromLon, toLat, toLon) {
+  const directDist = haversineKm(fromLat, fromLon, toLat, toLon)
+  if (directDist < 0.5) return [] // origin and dest are the same spot
+  return PARK_AND_RIDE
+    .map(pr => {
+      const driveDist = haversineKm(fromLat, fromLon, pr.lat, pr.lon)
+      const transitDist = haversineKm(pr.lat, pr.lon, toLat, toLon)
+      const detourRatio = (driveDist + transitDist) / directDist
+      return { ...pr, driveDist, detourRatio }
+    })
+    .filter(pr => pr.detourRatio <= 1.4 && pr.driveDist < directDist)
+    .sort((a, b) => a.detourRatio - b.detourRatio)
+    .slice(0, 4)
+}
+
 // ── Geocoding ──────────────────────────────────────────────────────────────────
 
 async function geocode(query) {
@@ -239,11 +268,13 @@ export default function TripPlanner() {
         const results = await geocode(from)
         if (!results.length) throw new Error(`Could not find location: "${from}"`)
         fCoords = results[0]
+        setFromCoords(fCoords)
       }
       if (!tCoords) {
         const results = await geocode(to)
         if (!results.length) throw new Error(`Could not find location: "${to}"`)
         tCoords = results[0]
+        setToCoords(tCoords)
       }
 
       const itineraries = await planTrip({
@@ -377,33 +408,62 @@ export default function TripPlanner() {
         </div>
       </form>
 
-      {/* Park & ride panel (drive-transit, pre-search) */}
-      {mode === 'drive-transit' && !trips && !loading && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2 mb-2">
-            <ParkingSquare size={15} />Nearby Park &amp; Ride locations
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {PARK_AND_RIDE.slice(0, 4).map(pr => {
-              const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
-              const availColor = pct > 30 ? 'text-green-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
-              const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
-              return (
-                <div key={pr.id} className="bg-white rounded-lg border border-indigo-100 p-2.5 text-xs">
-                  <div className="font-semibold text-gray-800">{pr.name}</div>
-                  <div className="text-gray-400 mt-0.5 mb-1.5">{pr.address}</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-1">
-                      {routes.map(r => <span key={r.id} className="px-1.5 py-0.5 rounded text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>{r.shortName}</span>)}
+      {/* Park & ride panel (drive-transit mode) */}
+      {mode === 'drive-transit' && !loading && (() => {
+        const hasBothCoords = fromCoords && toCoords
+        const suggested = hasBothCoords
+          ? getSuggestedParkAndRides(fromCoords.lat, fromCoords.lon, toCoords.lat, toCoords.lon)
+          : []
+        const showSuggested = hasBothCoords && suggested.length > 0
+        const list = showSuggested ? suggested : PARK_AND_RIDE.slice(0, 4)
+
+        return (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2 mb-1">
+              <ParkingSquare size={15} />
+              {showSuggested ? 'Park & Rides on your route' : 'Park & Ride locations'}
+            </h2>
+            {showSuggested && (
+              <p className="text-xs text-indigo-600 mb-2">
+                Stations within a reasonable detour from your route, sorted by how direct they are.
+              </p>
+            )}
+            {hasBothCoords && !showSuggested && (
+              <p className="text-xs text-indigo-600 mb-2">
+                No Park &amp; Ride stations found along this route — OTP will choose the best option automatically.
+              </p>
+            )}
+            <div className="grid sm:grid-cols-2 gap-2">
+              {list.map(pr => {
+                const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
+                const availColor = pct > 30 ? 'text-green-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
+                const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
+                return (
+                  <div key={pr.id} className="bg-white rounded-lg border border-indigo-100 p-2.5 text-xs">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="font-semibold text-gray-800">{pr.name}</div>
+                      {pr.driveDist != null && (
+                        <span className="text-indigo-500 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
+                      )}
                     </div>
-                    <span className={`font-medium ${availColor}`}>{pr.freeSpaces} spaces free</span>
+                    <div className="text-gray-400 mt-0.5 mb-1.5">{pr.address}</div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-1">
+                        {routes.map(r => (
+                          <span key={r.id} className="px-1.5 py-0.5 rounded text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
+                            {r.shortName}
+                          </span>
+                        ))}
+                      </div>
+                      <span className={`font-medium ${availColor}`}>{pr.freeSpaces} spaces free</span>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Error */}
       {error && (
