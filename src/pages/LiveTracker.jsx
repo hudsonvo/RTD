@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   Bus, Train, Zap, RefreshCw, AlertCircle,
-  Loader, MapPin, ArrowRight, Search, X, List, ChevronDown,
+  Loader, MapPin, ArrowRight, Search, X, List, ChevronDown, Clock,
 } from 'lucide-react'
-import { useVehiclePositions } from '../hooks/useRTDFeeds'
+import { useVehiclePositions, useArrivalsAtStop } from '../hooks/useRTDFeeds'
+import { getShapes, getStops } from '../api/gtfsStatic'
 import { VEHICLES as MOCK_VEHICLES, ROUTES } from '../data/mockData'
 
 const TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
@@ -158,6 +159,126 @@ function RouteGroup({ filter, vehicles, selectedId, onSelectVehicle }) {
     </div>
   )
 }
+
+// ── Route polyline ─────────────────────────────────────────────────────────────
+
+function RoutePolyline({ shapes, activeFilter, filters }) {
+  if (!shapes || activeFilter === 'all') return null
+  const f = filters.find(f => f.key === activeFilter)
+  if (!f) return null
+  const shape = shapes[`${f.routeId}:${f.directionId}`]
+    ?? shapes[`${f.routeId}:0`]
+  if (!shape) return null
+  return <Polyline positions={shape} color={f.color} weight={4} opacity={0.6} />
+}
+
+// ── Stop markers (visible at zoom ≥ 14) ────────────────────────────────────────
+
+function StopLayer({ stops, onStopClick }) {
+  const [zoom, setZoom] = useState(null)
+  const [bounds, setBounds] = useState(null)
+  const map = useMap()
+
+  useMapEvents({
+    zoomend:  () => { setZoom(map.getZoom()); setBounds(map.getBounds()) },
+    moveend:  () => setBounds(map.getBounds()),
+  })
+
+  useEffect(() => {
+    setZoom(map.getZoom())
+    setBounds(map.getBounds())
+  }, [map])
+
+  if (!stops || !bounds || zoom < 14) return null
+
+  const visible = Object.entries(stops)
+    .filter(([, s]) =>
+      typeof s === 'object' && s.lat && s.lon &&
+      s.lat >= bounds.getSouth() && s.lat <= bounds.getNorth() &&
+      s.lon >= bounds.getWest() && s.lon <= bounds.getEast()
+    )
+    .slice(0, 120)
+
+  return visible.map(([id, s]) => (
+    <CircleMarker
+      key={id}
+      center={[s.lat, s.lon]}
+      radius={5}
+      pathOptions={{ color: '#fff', fillColor: '#3B82F6', fillOpacity: 1, weight: 1.5 }}
+      eventHandlers={{ click: () => onStopClick({ id, name: s.name, lat: s.lat, lon: s.lon }) }}
+    />
+  ))
+}
+
+// ── Stop arrivals panel ─────────────────────────────────────────────────────────
+
+function StopArrivalsPanel({ stop, onClose }) {
+  const { arrivals, loading, error } = useArrivalsAtStop(stop?.id)
+
+  if (!stop) return null
+
+  function fmtEta(etaSec) {
+    if (!etaSec) return null
+    const mins = Math.round((etaSec - Date.now() / 1000) / 60)
+    if (mins <= 0) return 'Now'
+    if (mins < 60) return `${mins} min`
+    return new Date(etaSec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="font-semibold text-gray-900 flex items-center gap-1.5">
+            <MapPin size={14} className="text-blue-500" />
+            {stop.name}
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">Stop #{stop.id} · Live arrivals</p>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+          <X size={14} />
+        </button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+          <Loader size={13} className="animate-spin" />Loading arrivals…
+        </div>
+      )}
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      {!loading && !error && arrivals?.length === 0 && (
+        <p className="text-sm text-gray-400">No upcoming arrivals found.</p>
+      )}
+      {arrivals?.length > 0 && (
+        <div className="space-y-1.5">
+          {arrivals.slice(0, 8).map((a, i) => {
+            const eta = fmtEta(a.etaSec)
+            return (
+              <div key={i} className="flex items-center gap-2.5 text-sm">
+                <span
+                  className="px-2 py-0.5 rounded text-white font-bold text-xs shrink-0"
+                  style={{ backgroundColor: ROUTES.find(r => r.id === a.routeId || r.shortName === a.routeId)?.color ?? '#6B7280' }}
+                >
+                  {a.routeId}
+                </span>
+                <span className="flex-1 text-gray-700 truncate">{a.headsign ?? '—'}</span>
+                <span className={`text-xs font-medium shrink-0 flex items-center gap-1 ${
+                  a.delay === 0 ? 'text-green-600' : a.delay < 0 ? 'text-blue-600' : 'text-yellow-600'
+                }`}>
+                  <Clock size={11} />
+                  {eta ?? '—'}
+                  {a.delay !== 0 && <span className="text-gray-400 font-normal">({a.delay > 0 ? '+' : ''}{a.delay}m)</span>}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 function buildFilters(vehicles) {
   const map = new Map()
@@ -369,6 +490,12 @@ export default function LiveTracker() {
   const { vehicles: liveVehicles, loading, error, lastUpdated, refresh } = useVehiclePositions()
   const [activeFilter, setActiveFilter] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
+  const [shapes, setShapes] = useState(null)
+  const [stops, setStops] = useState(null)
+  const [selectedStop, setSelectedStop] = useState(null)
+
+  useEffect(() => { getShapes().then(setShapes).catch(() => {}) }, [])
+  useEffect(() => { getStops().then(setStops).catch(() => {}) }, [])
 
   const vehicles = error ? MOCK_VEHICLES : (liveVehicles ?? [])
   const isLive = !error && liveVehicles !== null
@@ -419,18 +546,23 @@ export default function LiveTracker() {
       )}
 
       {/* Map */}
-      <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: 420 }}>
+      <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: 460 }}>
         <MapContainer center={DENVER_CENTER} zoom={11} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <RoutePolyline shapes={shapes} activeFilter={activeFilter} filters={filters} />
+          <StopLayer stops={stops} onStopClick={s => { setSelectedStop(s); setSelectedId(null) }} />
           {filtered.map(v => (
-            <VehicleMarker key={v.id} v={v} onClick={() => selectVehicle(v.id)} />
+            <VehicleMarker key={v.id} v={v} onClick={() => { selectVehicle(v.id); setSelectedStop(null) }} />
           ))}
           <MapFocus vehicles={filtered} selectedId={selectedId} />
         </MapContainer>
       </div>
+
+      {/* Stop arrivals panel */}
+      <StopArrivalsPanel stop={selectedStop} onClose={() => setSelectedStop(null)} />
 
       {/* Search + browse */}
       <LineFilter

@@ -3,6 +3,7 @@
 
 let stopsCache = null
 let directionsCache = null
+let shapesCache = null
 
 async function loadJSON(path) {
   const res = await fetch(path)
@@ -18,6 +19,11 @@ export async function getStops() {
 export async function getDirections() {
   if (!directionsCache) directionsCache = await loadJSON('/gtfs-directions.json')
   return directionsCache
+}
+
+export async function getShapes() {
+  if (!shapesCache) shapesCache = await loadJSON('/gtfs-shapes.json')
+  return shapesCache
 }
 
 // stopId → "Stop Name"

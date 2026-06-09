@@ -1,6 +1,7 @@
-// Downloads RTD's static GTFS zip and extracts two small lookup files:
-//   public/gtfs-stops.json      { stopId: "Stop Name" }
+// Downloads RTD's static GTFS zip and extracts lookup files:
+//   public/gtfs-stops.json      { stopId: { name, lat, lon } }
 //   public/gtfs-directions.json { "routeId:directionId": "Headsign" }
+//   public/gtfs-shapes.json     { "routeId:directionId": [[lat, lon], ...] }
 //
 // Run with: npm run update-gtfs
 
@@ -80,13 +81,76 @@ async function main() {
     }
   }
 
+  // ── shapes.txt → { "routeId:directionId": [[lat, lon], ...] } ───────────
+  // For each route+direction, picks the most-used shape_id from trips.txt,
+  // then simplifies it (min 50 m between kept points) to keep the file small.
+  const shapesEntry = zip.getEntry('shapes.txt')
+  const shapesMap = {}
+
+  if (shapesEntry) {
+    // Tally shape_id usage per route+direction
+    const routeDirCounts = {}
+    for (const row of trips) {
+      if (!row.shape_id) continue
+      const key = `${row.route_id}:${row.direction_id ?? '0'}`
+      if (!routeDirCounts[key]) routeDirCounts[key] = {}
+      routeDirCounts[key][row.shape_id] = (routeDirCounts[key][row.shape_id] ?? 0) + 1
+    }
+
+    // Pick the most common shape_id per route+direction
+    const neededIds = new Set()
+    const routeDirToShape = {}
+    for (const [key, counts] of Object.entries(routeDirCounts)) {
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+      if (top) { routeDirToShape[key] = top[0]; neededIds.add(top[0]) }
+    }
+
+    // Read raw shape points (index-based for speed on large files)
+    const rawLines = shapesEntry.getData().toString('utf8').replace(/\r/g, '').trim().split('\n')
+    const hdr = parseLine(rawLines[0])
+    const iId  = hdr.indexOf('shape_id')
+    const iLat = hdr.indexOf('shape_pt_lat')
+    const iLon = hdr.indexOf('shape_pt_lon')
+    const iSeq = hdr.indexOf('shape_pt_sequence')
+    const rawPts = {}
+    for (let i = 1; i < rawLines.length; i++) {
+      const v = parseLine(rawLines[i])
+      const id = v[iId]
+      if (!neededIds.has(id)) continue
+      if (!rawPts[id]) rawPts[id] = []
+      rawPts[id].push({ seq: +v[iSeq], lat: +v[iLat], lon: +v[iLon] })
+    }
+
+    // Sort and simplify each shape (keep points ≥ 50 m apart)
+    function distM(lat1, lon1, lat2, lon2) {
+      const R = 6371000, dl = (lat2 - lat1) * Math.PI / 180, dg = (lon2 - lon1) * Math.PI / 180
+      const a = Math.sin(dl/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dg/2)**2
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    }
+
+    for (const [key, shapeId] of Object.entries(routeDirToShape)) {
+      const pts = (rawPts[shapeId] ?? []).sort((a, b) => a.seq - b.seq)
+      if (!pts.length) continue
+      const out = [[Math.round(pts[0].lat*1e5)/1e5, Math.round(pts[0].lon*1e5)/1e5]]
+      for (let i = 1; i < pts.length; i++) {
+        const prev = out[out.length - 1]
+        if (distM(prev[0], prev[1], pts[i].lat, pts[i].lon) >= 50) {
+          out.push([Math.round(pts[i].lat*1e5)/1e5, Math.round(pts[i].lon*1e5)/1e5])
+        }
+      }
+      shapesMap[key] = out
+    }
+  }
+
   mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(join(OUT_DIR, 'gtfs-stops.json'), JSON.stringify(stopsMap))
   writeFileSync(join(OUT_DIR, 'gtfs-directions.json'), JSON.stringify(directionsMap))
+  writeFileSync(join(OUT_DIR, 'gtfs-shapes.json'), JSON.stringify(shapesMap))
 
   console.log(`✓ ${Object.keys(stopsMap).length} stops`)
   console.log(`✓ ${Object.keys(directionsMap).length} route-direction pairs`)
-  console.log('Wrote public/gtfs-stops.json and public/gtfs-directions.json')
+  console.log(`✓ ${Object.keys(shapesMap).length} route shapes`)
+  console.log('Wrote public/gtfs-stops.json, gtfs-directions.json, gtfs-shapes.json')
 }
 
 main().catch(err => { console.error(err.message); process.exit(1) })
