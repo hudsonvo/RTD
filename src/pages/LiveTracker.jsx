@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -206,7 +206,9 @@ function StopLayer({ stops, onStopClick }) {
       radius={5}
       pathOptions={{ color: '#fff', fillColor: '#3B82F6', fillOpacity: 1, weight: 1.5 }}
       eventHandlers={{ click: () => onStopClick({ id, name: s.name, lat: s.lat, lon: s.lon }) }}
-    />
+    >
+      <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>{s.name}</Tooltip>
+    </CircleMarker>
   ))
 }
 
