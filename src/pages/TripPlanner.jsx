@@ -3,7 +3,7 @@ import {
   Navigation, Clock, ArrowRight, RotateCcw, MapPin,
   Bus, Train, Zap, Car, ParkingSquare, Footprints, X, AlertCircle,
 } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { ROUTES, PARK_AND_RIDE, POPULAR_LOCATIONS } from '../data/mockData'
@@ -259,18 +259,77 @@ function makeEndpointIcon(color, letter) {
 const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'A')
 const DEST_ICON   = makeEndpointIcon('#EF4444', 'B')
 
-function FitBounds({ from, to }) {
+function FitBounds({ points }) {
   const map = useMap()
   useEffect(() => {
-    if (!from || !to) return
-    map.fitBounds([[from.lat, from.lon], [to.lat, to.lon]], { padding: [50, 50], maxZoom: 14 })
-  }, [from, to, map])
+    if (!points?.length) return
+    map.fitBounds(points, { padding: [44, 44], maxZoom: 15 })
+  }, [points, map])
   return null
+}
+
+// Collect every coordinate in a trip for map bounds fitting
+function tripAllPoints(trip) {
+  const pts = []
+  for (const leg of trip.legs) {
+    if (leg.geometry?.length) pts.push(...leg.geometry)
+    else {
+      if (leg.fromCoords) pts.push(leg.fromCoords)
+      if (leg.toCoords)   pts.push(leg.toCoords)
+    }
+  }
+  return pts
+}
+
+function TripLegs({ trip }) {
+  return trip.legs.map((leg, i) => {
+    const path = leg.geometry?.length
+      ? leg.geometry
+      : [leg.fromCoords, leg.toCoords].filter(Boolean)
+    if (!path.length) return null
+
+    if (leg.type === 'walk' || leg.type === 'drive') {
+      return (
+        <Polyline
+          key={i}
+          positions={path}
+          color={leg.type === 'drive' ? '#374151' : '#9CA3AF'}
+          weight={3}
+          dashArray="6 8"
+          opacity={0.8}
+        />
+      )
+    }
+
+    // Transit leg
+    const color = leg.routeColor ?? '#3B82F6'
+    return (
+      <Polyline key={i} positions={path} color={color} weight={5} opacity={0.85} />
+    )
+  })
+}
+
+function TransferMarkers({ trip }) {
+  // Draw a small circle at every leg transition (skip origin — that's the A pin)
+  const points = trip.legs
+    .map((leg, i) => i > 0 ? leg.fromCoords : null)
+    .filter(Boolean)
+  return points.map((pt, i) => (
+    <CircleMarker
+      key={i}
+      center={pt}
+      radius={5}
+      pathOptions={{ color: '#fff', fillColor: '#6B7280', fillOpacity: 1, weight: 2 }}
+    />
+  ))
 }
 
 function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectIndex }) {
   if (!fromCoords || !toCoords || !trips?.length) return null
   const selected = trips[selectedIndex] ?? trips[0]
+  const allPoints = tripAllPoints(selected)
+
+  const transitLegs = selected.legs.filter(l => l.type === 'transit')
 
   return (
     <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
@@ -297,15 +356,17 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
       <MapContainer
         center={[fromCoords.lat, fromCoords.lon]}
         zoom={12}
-        style={{ height: 340, width: '100%' }}
+        style={{ height: 360, width: '100%' }}
         scrollWheelZoom
-        key={`${fromCoords.lat},${toCoords.lat}`}
+        key={`${fromCoords.lat},${toCoords.lat},${selectedIndex}`}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds from={fromCoords} to={toCoords} />
+        <FitBounds points={allPoints.length ? allPoints : [[fromCoords.lat, fromCoords.lon], [toCoords.lat, toCoords.lon]]} />
+        <TripLegs trip={selected} />
+        <TransferMarkers trip={selected} />
         <Marker position={[fromCoords.lat, fromCoords.lon]} icon={ORIGIN_ICON}>
           <Popup><strong>Origin</strong></Popup>
         </Marker>
@@ -314,12 +375,27 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
         </Marker>
       </MapContainer>
 
-      {/* Selected trip summary */}
-      <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 flex items-center gap-2 text-xs text-gray-500">
-        <span className="font-medium text-gray-700">{selected.duration}</span>
+      {/* Trip summary bar */}
+      <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+        <span className="font-semibold text-gray-800">{selected.duration}</span>
         <span>·</span>
         <span>{selected.departure} → {selected.arrival}</span>
-        <span className="ml-auto text-gray-400 italic">Route drawing coming soon</span>
+        {transitLegs.length > 0 && (
+          <>
+            <span>·</span>
+            <div className="flex gap-1">
+              {transitLegs.map((l, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-full text-white font-bold"
+                  style={{ backgroundColor: l.routeColor ?? '#3B82F6', fontSize: 10 }}
+                >
+                  {l.routeId}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
