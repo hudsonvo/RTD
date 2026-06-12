@@ -3,6 +3,9 @@ import {
   Navigation, Clock, ArrowRight, RotateCcw, MapPin,
   Bus, Train, Zap, Car, ParkingSquare, Footprints, X, AlertCircle,
 } from 'lucide-react'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { ROUTES, PARK_AND_RIDE, POPULAR_LOCATIONS } from '../data/mockData'
 import { planTrip, formatItinerary } from '../api/otp'
 
@@ -235,6 +238,93 @@ function TripCard({ trip }) {
   )
 }
 
+// ── Trip result map ────────────────────────────────────────────────────────────
+
+function makeEndpointIcon(color, letter) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center">
+      <div style="background:${color};width:30px;height:30px;border-radius:50%;
+        border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);
+        display:flex;align-items:center;justify-content:center;
+        color:white;font-size:13px;font-weight:800;font-family:system-ui">${letter}</div>
+      <div style="width:3px;height:8px;background:${color};border-radius:0 0 2px 2px;margin-top:-1px"></div>
+    </div>`,
+    iconSize: [30, 38],
+    iconAnchor: [15, 38],
+    popupAnchor: [0, -40],
+  })
+}
+
+const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'A')
+const DEST_ICON   = makeEndpointIcon('#EF4444', 'B')
+
+function FitBounds({ from, to }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!from || !to) return
+    map.fitBounds([[from.lat, from.lon], [to.lat, to.lon]], { padding: [50, 50], maxZoom: 14 })
+  }, [from, to, map])
+  return null
+}
+
+function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectIndex }) {
+  if (!fromCoords || !toCoords || !trips?.length) return null
+  const selected = trips[selectedIndex] ?? trips[0]
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+      {/* Trip selector tabs */}
+      {trips.length > 1 && (
+        <div className="flex border-b border-gray-100 bg-gray-50">
+          {trips.map((trip, i) => (
+            <button
+              key={i}
+              onClick={() => onSelectIndex(i)}
+              className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 ${
+                selectedIndex === i
+                  ? 'bg-white text-blue-600 border-blue-600'
+                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-white'
+              }`}
+            >
+              Option {i + 1} · {trip.duration}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Map */}
+      <MapContainer
+        center={[fromCoords.lat, fromCoords.lon]}
+        zoom={12}
+        style={{ height: 340, width: '100%' }}
+        scrollWheelZoom
+        key={`${fromCoords.lat},${toCoords.lat}`}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitBounds from={fromCoords} to={toCoords} />
+        <Marker position={[fromCoords.lat, fromCoords.lon]} icon={ORIGIN_ICON}>
+          <Popup><strong>Origin</strong></Popup>
+        </Marker>
+        <Marker position={[toCoords.lat, toCoords.lon]} icon={DEST_ICON}>
+          <Popup><strong>Destination</strong></Popup>
+        </Marker>
+      </MapContainer>
+
+      {/* Selected trip summary */}
+      <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 flex items-center gap-2 text-xs text-gray-500">
+        <span className="font-medium text-gray-700">{selected.duration}</span>
+        <span>·</span>
+        <span>{selected.departure} → {selected.arrival}</span>
+        <span className="ml-auto text-gray-400 italic">Route drawing coming soon</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function TripPlanner() {
@@ -250,6 +340,7 @@ export default function TripPlanner() {
     return d.toISOString().slice(0, 16)
   })
   const [trips, setTrips] = useState(null)
+  const [selectedTripIndex, setSelectedTripIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -287,6 +378,7 @@ export default function TripPlanner() {
       })
 
       setTrips(itineraries.map(formatItinerary))
+      setSelectedTripIndex(0)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -477,6 +569,13 @@ export default function TripPlanner() {
       {trips && (
         <div className="space-y-3">
           <p className="text-sm text-gray-500">{trips.length} option{trips.length !== 1 ? 's' : ''} found — click a result to expand the full route</p>
+          <TripResultMap
+            fromCoords={fromCoords}
+            toCoords={toCoords}
+            trips={trips}
+            selectedIndex={selectedTripIndex}
+            onSelectIndex={setSelectedTripIndex}
+          />
           {trips.map(trip => <TripCard key={trip.id} trip={trip} />)}
         </div>
       )}
