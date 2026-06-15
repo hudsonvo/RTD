@@ -31,12 +31,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Returns P&R locations sorted by how "on the way" they are.
-// A station qualifies if routing origin→PR→dest adds ≤40% over the direct distance
-// and the PR is closer to the origin than to the destination.
 function getSuggestedParkAndRides(fromLat, fromLon, toLat, toLon) {
   const directDist = haversineKm(fromLat, fromLon, toLat, toLon)
-  if (directDist < 0.5) return [] // origin and dest are the same spot
+  if (directDist < 0.5) return []
   return PARK_AND_RIDE
     .map(pr => {
       const driveDist = haversineKm(fromLat, fromLon, pr.lat, pr.lon)
@@ -111,7 +108,7 @@ function AddressInput({ value, onChange, onSelect, placeholder, pinColor, onClea
         onChange={handleChange}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder={placeholder}
-        className="w-full pl-9 pr-8 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        className="w-full pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-colors"
       />
       {value && (
         <button
@@ -123,13 +120,13 @@ function AddressInput({ value, onChange, onSelect, placeholder, pinColor, onClea
         </button>
       )}
       {open && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl z-50 overflow-hidden border border-gray-100">
           {suggestions.map((s, i) => (
             <button
               key={i}
               type="button"
               onMouseDown={() => pick(s)}
-              className="w-full flex items-start gap-2.5 px-3 py-2.5 text-sm hover:bg-gray-50 text-left"
+              className="w-full flex items-start gap-2.5 px-4 py-3 text-sm hover:bg-gray-50 text-left border-b border-gray-100 last:border-0"
             >
               <MapPin size={13} className="text-gray-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -185,14 +182,14 @@ function TripLeg({ leg, isLast }) {
 
 // ── TripCard ───────────────────────────────────────────────────────────────────
 
-function TripCard({ trip }) {
+function TripCard({ trip, showDivider }) {
   const [expanded, setExpanded] = useState(false)
   const transitLegs = trip.legs.filter(l => l.type === 'transit')
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className={showDivider ? 'border-t border-gray-100' : ''}>
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors text-left"
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex items-center gap-1 shrink-0">
@@ -218,19 +215,19 @@ function TripCard({ trip }) {
               const knownRoute = l.routeId ? ROUTES.find(r => r.id === l.routeId || r.shortName === l.routeId) : null
               const badgeColor = l.routeColor || knownRoute?.color || '#3B82F6'
               return l.routeId ? (
-                <span key={i} className="text-xs text-white px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: badgeColor }}>
+                <span key={i} className="text-xs text-white px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: badgeColor }}>
                   {l.routeId}
                 </span>
               ) : null
             })}
           </div>
         </div>
-        <div className="text-sm text-gray-500 shrink-0 flex items-center gap-1">
+        <div className="text-sm text-gray-400 shrink-0 flex items-center gap-1">
           {trip.departure}<ArrowRight size={12} />{trip.arrival}
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-gray-100 px-4 pt-3 pb-1">
+        <div className="border-t border-gray-100 px-4 pt-3 pb-1 bg-gray-50">
           {trip.legs.map((leg, i) => <TripLeg key={i} leg={leg} isLast={i === trip.legs.length - 1} />)}
         </div>
       )}
@@ -268,7 +265,6 @@ function FitBounds({ points }) {
   return null
 }
 
-// Collect every coordinate in a trip for map bounds fitting
 function tripAllPoints(trip) {
   const pts = []
   for (const leg of trip.legs) {
@@ -301,7 +297,6 @@ function TripLegs({ trip }) {
       )
     }
 
-    // Transit leg
     const color = leg.routeColor ?? '#3B82F6'
     return (
       <Polyline key={i} positions={path} color={color} weight={5} opacity={0.85} />
@@ -310,7 +305,6 @@ function TripLegs({ trip }) {
 }
 
 function TransferMarkers({ trip }) {
-  // Draw a small circle at every leg transition (skip origin — that's the A pin)
   const points = trip.legs
     .map((leg, i) => i > 0 ? leg.fromCoords : null)
     .filter(Boolean)
@@ -328,22 +322,21 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
   if (!fromCoords || !toCoords || !trips?.length) return null
   const selected = trips[selectedIndex] ?? trips[0]
   const allPoints = tripAllPoints(selected)
-
   const transitLegs = selected.legs.filter(l => l.type === 'transit')
 
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
       {/* Trip selector tabs */}
       {trips.length > 1 && (
-        <div className="flex border-b border-gray-100 bg-gray-50">
+        <div className="flex border-b border-gray-100">
           {trips.map((trip, i) => (
             <button
               key={i}
               onClick={() => onSelectIndex(i)}
-              className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 ${
+              className={`flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2 ${
                 selectedIndex === i
-                  ? 'bg-white text-blue-600 border-blue-600'
-                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-white'
+                  ? 'text-blue-600 border-blue-600 bg-blue-50'
+                  : 'text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-50'
               }`}
             >
               Option {i + 1} · {trip.duration}
@@ -376,13 +369,13 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
       </MapContainer>
 
       {/* Trip summary bar */}
-      <div className="bg-gray-50 border-t border-gray-100 px-4 py-2 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-        <span className="font-semibold text-gray-800">{selected.duration}</span>
-        <span>·</span>
+      <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+        <span className="font-bold text-gray-800 text-sm">{selected.duration}</span>
+        <span className="text-gray-300">·</span>
         <span>{selected.departure} → {selected.arrival}</span>
         {transitLegs.length > 0 && (
           <>
-            <span>·</span>
+            <span className="text-gray-300">·</span>
             <div className="flex gap-1">
               {transitLegs.map((l, i) => (
                 <span
@@ -428,7 +421,6 @@ export default function TripPlanner() {
     setTrips(null)
 
     try {
-      // Resolve coords: use picked suggestion coords or geocode the raw string
       let fCoords = fromCoords
       let tCoords = toCoords
       if (!fCoords) {
@@ -469,16 +461,16 @@ export default function TripPlanner() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      <div>
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+      <div className="px-1">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Navigation className="text-blue-600" size={24} />
+          <Navigation className="text-blue-600" size={22} />
           Trip Planner
         </h1>
-        <p className="text-gray-500 mt-1 text-sm">Find the best route between two points in Denver</p>
+        <p className="text-gray-500 mt-0.5 text-sm">Find the best route between two points in Denver</p>
       </div>
 
-      <form onSubmit={handleSearch} className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <form onSubmit={handleSearch} className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
         {/* Mode */}
         <div className="flex gap-2">
           {MODES.map(({ id, label, icon: Icon }) => (
@@ -486,8 +478,10 @@ export default function TripPlanner() {
               key={id}
               type="button"
               onClick={() => { setMode(id); setTrips(null) }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                mode === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+                mode === id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               <Icon size={14} />{label}
@@ -504,7 +498,7 @@ export default function TripPlanner() {
               onSelect={s => setFromCoords(s)}
               onClear={() => { setFrom(''); setFromCoords(null); setTrips(null) }}
               placeholder="From: address or stop name"
-              pinColor="text-green-500"
+              pinColor="text-emerald-500"
             />
             <AddressInput
               value={to}
@@ -518,7 +512,7 @@ export default function TripPlanner() {
           <button
             type="button"
             onClick={handleSwap}
-            className="self-center p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-500"
+            className="self-center p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
             title="Swap"
           >
             <RotateCcw size={16} />
@@ -527,14 +521,16 @@ export default function TripPlanner() {
 
         {/* Time selector + search */}
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden shrink-0">
+          <div className="flex rounded-xl bg-gray-100 p-0.5 shrink-0">
             {TIME_MODES.map(m => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setTimeMode(m.id)}
-                className={`px-3 py-2 text-sm font-medium transition-colors ${
-                  timeMode === m.id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  timeMode === m.id
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {m.label}
@@ -546,13 +542,13 @@ export default function TripPlanner() {
               type="datetime-local"
               value={datetime}
               onChange={e => setDatetime(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
             />
           )}
           <button
             type="submit"
             disabled={!from || !to || loading}
-            className="ml-auto px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="ml-auto px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {loading ? 'Searching…' : 'Search'}
           </button>
@@ -567,7 +563,7 @@ export default function TripPlanner() {
                 key={loc.name}
                 type="button"
                 onClick={() => { setTo(loc.address); setToCoords(null); setTrips(null) }}
-                className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors"
+                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 font-medium transition-colors"
               >
                 {loc.name}
               </button>
@@ -586,44 +582,38 @@ export default function TripPlanner() {
         const list = showSuggested ? suggested : PARK_AND_RIDE.slice(0, 4)
 
         return (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-indigo-900 flex items-center gap-2 mb-1">
-              <ParkingSquare size={15} />
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-3">
+              <ParkingSquare size={13} />
               {showSuggested ? 'Park & Rides on your route' : 'Park & Ride locations'}
             </h2>
-            {showSuggested && (
-              <p className="text-xs text-indigo-600 mb-2">
-                Stations within a reasonable detour from your route, sorted by how direct they are.
-              </p>
-            )}
             {hasBothCoords && !showSuggested && (
-              <p className="text-xs text-indigo-600 mb-2">
+              <p className="text-xs text-gray-400 mb-3">
                 No Park &amp; Ride stations found along this route — OTP will choose the best option automatically.
               </p>
             )}
-            <div className="grid sm:grid-cols-2 gap-2">
-              {list.map(pr => {
+            <div className="space-y-0">
+              {list.map((pr, i) => {
                 const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
-                const availColor = pct > 30 ? 'text-green-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
+                const availColor = pct > 30 ? 'text-emerald-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
                 const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
                 return (
-                  <div key={pr.id} className="bg-white rounded-lg border border-indigo-100 p-2.5 text-xs">
-                    <div className="flex items-start justify-between gap-1">
+                  <div key={pr.id} className={`py-3 text-xs ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                    <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="font-semibold text-gray-800">{pr.name}</div>
                       {pr.driveDist != null && (
-                        <span className="text-indigo-500 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
+                        <span className="text-gray-400 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
                       )}
                     </div>
-                    <div className="text-gray-400 mt-0.5 mb-1.5">{pr.address}</div>
                     <div className="flex items-center justify-between">
                       <div className="flex gap-1">
                         {routes.map(r => (
-                          <span key={r.id} className="px-1.5 py-0.5 rounded text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
+                          <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
                             {r.shortName}
                           </span>
                         ))}
                       </div>
-                      <span className={`font-medium ${availColor}`}>{pr.freeSpaces} spaces free</span>
+                      <span className={`font-semibold ${availColor}`}>{pr.freeSpaces} spaces free</span>
                     </div>
                   </div>
                 )
@@ -635,7 +625,7 @@ export default function TripPlanner() {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-red-800">
+        <div className="border-l-4 border-red-500 bg-red-50 px-4 py-3 rounded-r-xl flex items-start gap-2 text-sm text-red-800">
           <AlertCircle size={16} className="shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -644,7 +634,7 @@ export default function TripPlanner() {
       {/* Results */}
       {trips && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-500">{trips.length} option{trips.length !== 1 ? 's' : ''} found — click a result to expand the full route</p>
+          <p className="text-xs text-gray-400 px-1">{trips.length} option{trips.length !== 1 ? 's' : ''} found — tap to expand</p>
           <TripResultMap
             fromCoords={fromCoords}
             toCoords={toCoords}
@@ -652,7 +642,9 @@ export default function TripPlanner() {
             selectedIndex={selectedTripIndex}
             onSelectIndex={setSelectedTripIndex}
           />
-          {trips.map(trip => <TripCard key={trip.id} trip={trip} />)}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {trips.map((trip, i) => <TripCard key={trip.id} trip={trip} showDivider={i > 0} />)}
+          </div>
         </div>
       )}
     </div>

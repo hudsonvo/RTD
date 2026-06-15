@@ -56,31 +56,31 @@ function ArrivalsBoard({ stop, onBack }) {
   return (
     <div className="space-y-4">
       {/* Stop header */}
-      <div className="flex items-center gap-2">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+      <div className="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center gap-2">
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
           <ChevronLeft size={18} />
         </button>
-        <MapPin size={16} className="text-blue-500 shrink-0" />
-        <h2 className="font-semibold text-gray-900 flex-1 text-lg leading-tight">{stop.name}</h2>
+        <MapPin size={15} className="text-blue-500 shrink-0" />
+        <h2 className="font-semibold text-gray-900 flex-1 leading-tight">{stop.name}</h2>
         <button
           onClick={() => toggle({ type: 'stop', id: stop.id, name: stop.name })}
-          className={`p-1.5 rounded-lg transition-colors ${fav ? 'text-yellow-500 hover:text-yellow-600' : 'text-gray-300 hover:text-gray-500'}`}
+          className={`p-1.5 rounded-lg transition-colors ${fav ? 'text-yellow-500 hover:text-yellow-600' : 'text-gray-300 hover:text-gray-400'}`}
           title={fav ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Star size={18} fill={fav ? 'currentColor' : 'none'} />
+          <Star size={16} fill={fav ? 'currentColor' : 'none'} />
         </button>
         <div className="flex items-center gap-1 text-xs text-gray-400">
-          {loading && <Loader size={12} className="animate-spin" />}
+          {loading && <Loader size={11} className="animate-spin" />}
           {lastUpdated && lastUpdated.toLocaleTimeString()}
           <button onClick={refresh} className="p-1 rounded hover:bg-gray-100 text-gray-400 transition-colors">
-            <RefreshCw size={12} />
+            <RefreshCw size={11} />
           </button>
         </div>
       </div>
 
       {/* Stop map */}
       {stop.lat && stop.lon && (
-        <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: 180 }}>
+        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ height: 180 }}>
           <MapContainer center={[stop.lat, stop.lon]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomControl={false}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -95,27 +95,32 @@ function ArrivalsBoard({ stop, onBack }) {
 
       {/* Arrivals */}
       {error && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-yellow-800">
-          <AlertCircle size={15} className="shrink-0 mt-0.5" />
+        <div className="border-l-4 border-yellow-400 bg-yellow-50 px-4 py-3 rounded-r-xl flex items-start gap-2 text-sm text-yellow-800">
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
           Could not load arrivals: {error}
         </div>
       )}
 
       {loading && !arrivals ? (
-        <div className="flex items-center justify-center py-10 text-gray-400 gap-2">
+        <div className="flex items-center justify-center py-12 text-gray-400 gap-2">
           <Loader size={18} className="animate-spin" />Loading arrivals…
         </div>
       ) : arrivals?.length === 0 ? (
-        <div className="text-center py-10 text-gray-400 text-sm">No upcoming arrivals found for this stop.</div>
+        <div className="text-center py-12 text-gray-400 text-sm">No upcoming arrivals found for this stop.</div>
       ) : (
-        <div className="space-y-2">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           {arrivals?.map((a, i) => {
             const route = findRoute(a.routeId)
             const eta = etaLabel(a.etaSec)
             return (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 flex items-center gap-3 px-4 py-3">
+              <div key={i} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                {/* Route color accent */}
                 <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  className="w-1 self-stretch rounded-full shrink-0"
+                  style={{ backgroundColor: route?.color ?? '#6B7280' }}
+                />
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                   style={{ backgroundColor: route?.color ?? '#6B7280' }}
                 >
                   {route?.shortName ?? a.routeId?.slice(0, 3) ?? '?'}
@@ -129,13 +134,13 @@ function ArrivalsBoard({ stop, onBack }) {
                   )}
                 </div>
                 <div className="text-right shrink-0">
-                  {eta && <div className="font-bold text-gray-900 text-sm">{eta}</div>}
+                  {eta && <div className="font-bold text-gray-900">{eta}</div>}
                   {a.delay !== 0 && (
-                    <div className={`text-xs font-medium ${a.delay < 0 ? 'text-blue-600' : 'text-yellow-600'}`}>
+                    <div className={`text-xs font-semibold ${a.delay < 0 ? 'text-blue-600' : 'text-yellow-600'}`}>
                       {a.delay < 0 ? `${Math.abs(a.delay)}m early` : `+${a.delay}m`}
                     </div>
                   )}
-                  {a.delay === 0 && <div className="text-xs text-green-600 font-medium">On time</div>}
+                  {a.delay === 0 && <div className="text-xs text-emerald-600 font-semibold">On time</div>}
                 </div>
               </div>
             )
@@ -150,13 +155,13 @@ function ArrivalsBoard({ stop, onBack }) {
 function NearbyStopsList({ stops, userLocation, onSelect }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900">Stops near you</h2>
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Stops near you</span>
         <span className="text-xs text-gray-400">{stops.length} within 800m</span>
       </div>
 
       {userLocation && stops.length > 0 && (
-        <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: 220 }}>
+        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ height: 220 }}>
           <MapContainer center={[userLocation.lat, userLocation.lon]} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomControl={false}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -176,17 +181,17 @@ function NearbyStopsList({ stops, userLocation, onSelect }) {
         </div>
       )}
 
-      <div className="space-y-1.5">
-        {stops.map(s => (
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        {stops.map((s, i) => (
           <button
             key={s.id}
             onClick={() => onSelect(s)}
-            className="w-full flex items-center gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3 hover:shadow-sm transition-shadow text-left"
+            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left ${i > 0 ? 'border-t border-gray-100' : ''}`}
           >
-            <MapPin size={15} className="text-blue-400 shrink-0" />
+            <MapPin size={14} className="text-blue-400 shrink-0" />
             <span className="flex-1 text-sm text-gray-900 truncate">{s.name}</span>
-            <span className="text-xs text-gray-400 shrink-0">{s.dist}m away</span>
-            <ArrowRight size={14} className="text-gray-300 shrink-0" />
+            <span className="text-xs text-gray-400 shrink-0">{s.dist}m</span>
+            <ArrowRight size={13} className="text-gray-300 shrink-0" />
           </button>
         ))}
       </div>
@@ -201,7 +206,6 @@ export default function Stops() {
   const [selectedStop, setSelectedStop] = useState(null)
   const { stops: nearbyStops, userLocation, locError, locLoading, locate } = useNearbyStops()
 
-  // Load stop suggestions as user types
   useEffect(() => {
     if (query.length < 2) { setSuggestions([]); return }
     getStops()
@@ -217,31 +221,33 @@ export default function Stops() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <MapPin className="text-blue-600" size={24} />
-        Stop Finder
-      </h1>
+      <div className="px-1">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <MapPin className="text-blue-600" size={22} />
+          Stop Finder
+        </h1>
+      </div>
 
       {!selectedStop && (
         <>
           {/* Search + locate */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search stops — e.g. Union Station, Colfax…"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
               />
               {suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl z-50 overflow-hidden border border-gray-100">
                   {suggestions.map(s => (
                     <button
                       key={s.id}
                       onMouseDown={() => selectStop(s)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-gray-50 text-left"
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-sm hover:bg-gray-50 text-left border-b border-gray-100 last:border-0"
                     >
                       <MapPin size={13} className="text-blue-400 shrink-0" />
                       <span className="flex-1 truncate">{s.name}</span>
@@ -254,7 +260,7 @@ export default function Stops() {
             <button
               onClick={locate}
               disabled={locLoading}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors whitespace-nowrap"
             >
               {locLoading ? <Loader size={14} className="animate-spin" /> : <Navigation size={14} />}
               Near me
@@ -262,8 +268,8 @@ export default function Stops() {
           </div>
 
           {locError && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 flex items-start gap-2 text-sm text-yellow-800">
-              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+            <div className="border-l-4 border-yellow-400 bg-yellow-50 px-4 py-3 rounded-r-xl flex items-start gap-2 text-sm text-yellow-800">
+              <AlertCircle size={14} className="shrink-0 mt-0.5" />
               {locError}
             </div>
           )}
