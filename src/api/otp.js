@@ -7,6 +7,7 @@ const LEG_FIELDS = `
     to   { name lat lon }
     route { shortName longName color }
     intermediateStops { name }
+    legGeometry { points }
   }
 `
 
@@ -38,6 +39,23 @@ const DRIVE_TRANSIT_MODES = [
   { mode: 'CAR' }, { mode: 'WALK' }, { mode: 'BUS' },
   { mode: 'TRAM' }, { mode: 'RAIL' }, { mode: 'SUBWAY' },
 ]
+
+// Decode Google Polyline Algorithm encoded string → [[lat, lon], ...]
+export function decodePolyline(encoded) {
+  if (!encoded) return []
+  const coords = []
+  let index = 0, lat = 0, lng = 0
+  while (index < encoded.length) {
+    let b, shift = 0, result = 0
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
+    lat += (result & 1) ? ~(result >> 1) : result >> 1
+    shift = 0; result = 0
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5 } while (b >= 0x20)
+    lng += (result & 1) ? ~(result >> 1) : result >> 1
+    coords.push([lat / 1e5, lng / 1e5])
+  }
+  return coords
+}
 
 export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries = 3, dateTime = null, arriveBy = false, driveTransit = false }) {
   const epochMs = dateTime ? new Date(dateTime).getTime() : null
@@ -86,30 +104,47 @@ export function formatItinerary(itin, id) {
     departure: start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     arrival:   end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     legs: itin.legs.map(leg => {
-      const dMin   = Math.max(1, Math.round(leg.duration / 60))
-      const toName = leg.to?.name && leg.to.name !== 'Destination' ? leg.to.name : null
+      const dMin      = Math.max(1, Math.round(leg.duration / 60))
+      const toName    = leg.to?.name && leg.to.name !== 'Destination' ? leg.to.name : null
+      const fromName  = leg.from?.name && leg.from.name !== 'Origin' ? leg.from.name : null
+      const geometry  = decodePolyline(leg.legGeometry?.points)
+      const fromCoords = leg.from ? [leg.from.lat, leg.from.lon] : null
+      const toCoords   = leg.to   ? [leg.to.lat,   leg.to.lon]   : null
 
       if (leg.mode === 'WALK') {
-        return { type: 'walk', desc: toName ? `Walk to ${toName}` : 'Walk', time: `${dMin} min` }
+        return {
+          type: 'walk',
+          desc: toName ? `Walk to ${toName}` : 'Walk',
+          time: `${dMin} min`,
+          geometry, fromCoords, toCoords,
+        }
       }
 
       if (leg.mode === 'CAR') {
         const miles = (leg.distance * 0.000621371).toFixed(1)
-        return { type: 'drive', desc: toName ? `Drive to ${toName}` : 'Drive', time: `${dMin} min`, distance: `${miles} mi` }
+        return {
+          type: 'drive',
+          desc: toName ? `Drive to ${toName}` : 'Drive',
+          time: `${dMin} min`,
+          distance: `${miles} mi`,
+          geometry, fromCoords, toCoords,
+        }
       }
 
-      // Transit leg — route data comes from GraphQL response directly
+      // Transit leg
       const shortName = leg.route?.shortName ?? ''
       const color     = leg.route?.color ? `#${leg.route.color}` : null
       const modeToType = { BUS: 'bus', TRAM: 'light-rail', RAIL: 'commuter-rail', SUBWAY: 'light-rail' }
       return {
         type: 'transit',
-        routeId:   shortName,
+        routeId:    shortName,
         routeColor: color,
-        routeType: modeToType[leg.mode] ?? 'bus',
-        desc:  `${shortName || leg.mode} toward ${toName ?? 'destination'}`,
-        stops: leg.intermediateStops?.length ?? 0,
-        time:  `${dMin} min`,
+        routeType:  modeToType[leg.mode] ?? 'bus',
+        desc:       `${shortName || leg.mode} toward ${toName ?? 'destination'}`,
+        stops:      leg.intermediateStops?.length ?? 0,
+        time:       `${dMin} min`,
+        fromName, toName,
+        geometry, fromCoords, toCoords,
       }
     }),
   }

@@ -11,148 +11,141 @@ const ROUTE_TYPE_ICON = {
   'bus-rapid-transit': Zap,
 }
 
-const SEVERITY_STYLES = {
-  warning: 'bg-yellow-50 border-yellow-300 text-yellow-800',
-  info: 'bg-blue-50 border-blue-300 text-blue-800',
-  success: 'bg-green-50 border-green-300 text-green-800',
+const SEVERITY_ACCENT = {
+  warning: '#EAB308',
+  info: '#3B82F6',
+  success: '#22C55E',
 }
 
 export default function Dashboard() {
   const { vehicles, loading: vehiclesLoading } = useVehiclePositions()
   const { alerts, loading: alertsLoading } = useAlerts()
-  const recentAlerts = (alerts ?? []).slice(0, 2)
-  const liveVehicles = (vehicles ?? []).slice(0, 4)
+  const recentAlerts = (alerts ?? []).slice(0, 3)
+  const liveVehicles = (vehicles ?? []).slice(0, 5)
   const { favorites } = useFavorites()
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Welcome to Denver RTD</h1>
-        <p className="text-gray-500 mt-1">Real-time transit information for the Denver metro area</p>
+    <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+      <div className="px-1">
+        <h1 className="text-2xl font-bold text-gray-900">Denver RTD</h1>
+        <p className="text-gray-500 mt-0.5 text-sm">Real-time transit for the Denver metro area</p>
       </div>
 
-      {/* Favorites */}
-      {favorites.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-3">
-            <Star size={16} className="text-yellow-500" fill="currentColor" />
-            Favorites
-          </h2>
-          <div className="space-y-1.5">
-            {favorites.map(fav => (
-              <Link
-                key={`${fav.type}-${fav.id}`}
-                to={fav.type === 'stop' ? `/stops?id=${fav.id}` : `/routes?id=${fav.id}`}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${fav.type === 'stop' ? 'bg-blue-100' : 'bg-purple-100'}`}>
-                  {fav.type === 'stop'
-                    ? <MapPin size={13} className="text-blue-600" />
-                    : <Bus size={13} className="text-purple-600" />
-                  }
-                </div>
-                <span className="flex-1 text-sm text-gray-800">{fav.name}</span>
-                <ArrowRight size={13} className="text-gray-300" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Quick actions */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="bg-white rounded-2xl shadow-sm p-2 grid grid-cols-3 sm:grid-cols-5 gap-1">
         {[
-          { to: '/planner', icon: Navigation, label: 'Plan a Trip', color: 'bg-blue-600', desc: 'Get directions' },
-          { to: '/tracker', icon: MapPin, label: 'Live Tracker', color: 'bg-green-600', desc: 'Track vehicles' },
-          { to: '/stops', icon: Clock, label: 'Stop Finder', color: 'bg-teal-600', desc: 'Arrivals board' },
-          { to: '/routes', icon: Map, label: 'Browse Routes', color: 'bg-purple-600', desc: 'Schedules & stops' },
-          { to: '/alerts', icon: AlertTriangle, label: 'Service Alerts', color: 'bg-orange-500', desc: alerts ? `${alerts.length} active` : 'Live alerts' },
-        ].map(({ to, icon: Icon, label, color, desc }) => (
+          { to: '/planner', icon: Navigation, label: 'Plan Trip', color: 'bg-blue-600' },
+          { to: '/tracker', icon: MapPin, label: 'Live Map', color: 'bg-emerald-600' },
+          { to: '/stops', icon: Clock, label: 'Stops', color: 'bg-teal-600' },
+          { to: '/routes', icon: Map, label: 'Routes', color: 'bg-violet-600' },
+          { to: '/alerts', icon: AlertTriangle, label: 'Alerts', color: 'bg-orange-500' },
+        ].map(({ to, icon: Icon, label, color }) => (
           <Link
             key={to}
             to={to}
-            className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow text-center"
+            className="flex flex-col items-center gap-2 py-4 px-2 rounded-xl hover:bg-gray-50 transition-colors text-center"
           >
-            <div className={`${color} text-white p-3 rounded-lg`}>
-              <Icon size={22} />
+            <div className={`${color} text-white p-2.5 rounded-xl`}>
+              <Icon size={20} />
             </div>
-            <div>
-              <div className="font-semibold text-gray-900 text-sm">{label}</div>
-              <div className="text-gray-400 text-xs">{desc}</div>
-            </div>
+            <span className="text-xs font-medium text-gray-700">{label}</span>
           </Link>
         ))}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      {/* Favorites */}
+      {favorites.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+            <Star size={14} className="text-yellow-500" fill="currentColor" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Favorites</span>
+          </div>
+          {favorites.map(fav => (
+            <Link
+              key={`${fav.type}-${fav.id}`}
+              to={fav.type === 'stop' ? `/stops?id=${fav.id}` : `/routes?id=${fav.id}`}
+              className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
+            >
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${fav.type === 'stop' ? 'bg-blue-100' : 'bg-violet-100'}`}>
+                {fav.type === 'stop'
+                  ? <MapPin size={13} className="text-blue-600" />
+                  : <Bus size={13} className="text-violet-600" />
+                }
+              </div>
+              <span className="flex-1 text-sm text-gray-800">{fav.name}</span>
+              <ArrowRight size={13} className="text-gray-300" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-4">
         {/* Live vehicles */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live Vehicles
             </h2>
-            <Link to="/tracker" className="text-blue-600 text-sm hover:underline">View map →</Link>
+            <Link to="/tracker" className="text-blue-600 text-xs hover:underline">View map →</Link>
           </div>
-          <div className="space-y-2">
-            {vehiclesLoading && !vehicles ? (
-              <div className="text-sm text-gray-400 py-4 text-center">Loading vehicles…</div>
-            ) : liveVehicles.map((v) => {
-              const route = ROUTES.find(r => r.id === v.routeId)
-              const Icon = ROUTE_TYPE_ICON[route?.type] || Bus
-              return (
-                <div key={v.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                    style={{ backgroundColor: route?.color || '#666' }}
-                  >
-                    {route?.shortName ?? v.routeId}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{route?.name ?? `Route ${v.routeId}`}</div>
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
-                      <Clock size={11} />
-                      Next: {v.nextStopName ?? v.nextStop ?? '—'}
-                    </div>
-                  </div>
-                  <div className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    v.delay === 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {v.delay === 0 ? 'On time' : `+${v.delay} min`}
+          {vehiclesLoading && !vehicles ? (
+            <div className="text-sm text-gray-400 py-8 text-center">Loading vehicles…</div>
+          ) : liveVehicles.map((v) => {
+            const route = ROUTES.find(r => r.id === v.routeId)
+            return (
+              <div key={v.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ backgroundColor: route?.color || '#6B7280' }}
+                >
+                  {route?.shortName ?? v.routeId}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{route?.name ?? `Route ${v.routeId}`}</div>
+                  <div className="text-xs text-gray-400 flex items-center gap-1">
+                    <Clock size={10} />
+                    {v.nextStopName ?? v.nextStop ?? '—'}
                   </div>
                 </div>
-              )
-            })}
-          </div>
+                <div className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  v.delay === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {v.delay === 0 ? 'On time' : `+${v.delay}m`}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Recent alerts */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-900">Recent Alerts</h2>
-            <Link to="/alerts" className="text-blue-600 text-sm hover:underline">All alerts →</Link>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recent Alerts</h2>
+            <Link to="/alerts" className="text-blue-600 text-xs hover:underline">All alerts →</Link>
           </div>
-          <div className="space-y-2">
-            {alertsLoading && !alerts ? (
-              <div className="text-sm text-gray-400 py-4 text-center">Loading alerts…</div>
-            ) : recentAlerts.length === 0 ? (
-              <div className="text-sm text-gray-400 py-4 text-center">No active alerts</div>
-            ) : recentAlerts.map((alert) => (
+          {alertsLoading && !alerts ? (
+            <div className="text-sm text-gray-400 py-8 text-center">Loading alerts…</div>
+          ) : recentAlerts.length === 0 ? (
+            <div className="text-sm text-gray-400 py-8 text-center">No active alerts</div>
+          ) : recentAlerts.map((alert) => (
+            <div key={alert.id} className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 last:border-0">
               <div
-                key={alert.id}
-                className={`p-3 rounded-lg border text-sm ${SEVERITY_STYLES[alert.severity]}`}
-              >
-                <div className="font-semibold">{alert.title}</div>
-                <div className="mt-0.5 opacity-80 text-xs line-clamp-2">{alert.description}</div>
+                className="w-0.5 self-stretch rounded-full shrink-0 mt-0.5"
+                style={{ backgroundColor: SEVERITY_ACCENT[alert.severity] ?? '#9CA3AF' }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900 truncate">{alert.title}</div>
+                <div className="text-xs text-gray-400 mt-0.5 line-clamp-1">{alert.description}</div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Popular routes */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-semibold text-gray-900 mb-3">Popular Routes</h2>
+      <div className="bg-white rounded-2xl shadow-sm p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Popular Routes</h2>
         <div className="flex flex-wrap gap-2">
           {ROUTES.map((route) => {
             const Icon = ROUTE_TYPE_ICON[route.type] || Bus
@@ -160,22 +153,16 @@ export default function Dashboard() {
               <Link
                 key={route.id}
                 to={`/routes?id=${route.id}`}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:shadow-sm transition text-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-xs font-semibold hover:opacity-85 transition-opacity"
+                style={{ backgroundColor: route.color }}
               >
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: route.color }}
-                >
-                  <Icon size={10} />
-                </div>
-                <span className="font-medium text-gray-800">{route.shortName}</span>
-                <span className="text-gray-400 hidden sm:inline">{route.description}</span>
+                <Icon size={11} />
+                {route.shortName}
               </Link>
             )
           })}
         </div>
       </div>
-
     </div>
   )
 }
