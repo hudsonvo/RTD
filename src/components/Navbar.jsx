@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom'
-import { MapPin, Navigation, Map, AlertTriangle, Bus, Clock } from 'lucide-react'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { MapPin, Navigation, Map, AlertTriangle, Bus, Clock, LogOut, User } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: Bus },
@@ -11,6 +12,14 @@ const links = [
 ]
 
 export default function Navbar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/')
+  }
+
   return (
     <nav className="bg-[#003DA5] text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4">
@@ -20,7 +29,35 @@ export default function Navbar() {
           </div>
           <span className="font-bold text-xl tracking-tight">Denver RTD</span>
           <span className="ml-2 text-blue-300 text-sm hidden sm:block">Regional Transportation District</span>
+
+          {/* Auth controls */}
+          <div className="ml-auto flex items-center gap-2">
+            {user ? (
+              <>
+                <div className="hidden sm:flex items-center gap-1.5 text-sm text-blue-200">
+                  <User size={14} />
+                  <span className="max-w-[160px] truncate">{user.email}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-sm font-medium transition-colors"
+                  title="Sign out"
+                >
+                  <LogOut size={14} />
+                  <span className="hidden sm:inline">Sign out</span>
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-[#003DA5] text-sm font-semibold hover:bg-blue-50 transition-colors"
+              >
+                Sign in
+              </Link>
+            )}
+          </div>
         </div>
+
         <div className="flex gap-1 py-1 overflow-x-auto">
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink
