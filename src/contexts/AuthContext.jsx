@@ -2,43 +2,59 @@ import { createContext, useContext, useState, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
+const TOKEN_KEY = 'rtd_token'
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`)
+  return data
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Restore session from localStorage on mount
+  // On mount: validate any stored token against the server
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('rtd_user')
-      if (stored) setUser(JSON.parse(stored))
-    } catch {
-      localStorage.removeItem('rtd_user')
-    }
-    setLoading(false)
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (!token) { setLoading(false); return }
+
+    apiFetch('/api/auth/me')
+      .then(data => setUser(data.user))
+      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .finally(() => setLoading(false))
   }, [])
 
-  // ── Swap these stubs for real fetch() calls once the backend exists ──────────
-
   async function register(email, password) {
-    // TODO: POST /api/auth/register  →  { user: { id, email } }
-    const user = { id: crypto.randomUUID(), email }
-    localStorage.setItem('rtd_user', JSON.stringify(user))
-    setUser(user)
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    localStorage.setItem(TOKEN_KEY, data.token)
+    setUser(data.user)
   }
 
   async function login(email, password) {
-    // TODO: POST /api/auth/login  →  { user: { id, email } }
-    const stored = localStorage.getItem('rtd_user')
-    const existing = stored ? JSON.parse(stored) : null
-    if (!existing || existing.email !== email) {
-      throw new Error('No account found with that email. Please register first.')
-    }
-    setUser(existing)
+    const data = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    localStorage.setItem(TOKEN_KEY, data.token)
+    setUser(data.user)
   }
 
   async function logout() {
-    // TODO: POST /api/auth/logout  (clear server-side session)
-    localStorage.removeItem('rtd_user')
+    await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    localStorage.removeItem(TOKEN_KEY)
     setUser(null)
   }
 

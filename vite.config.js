@@ -22,6 +22,10 @@ export default defineConfig({
         rewrite: path => path.replace(/^\/api\/geocode/, ''),
         headers: { 'User-Agent': 'DenverRTD-App/1.0 (educational project)' },
       },
+      '/api/auth': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 })
