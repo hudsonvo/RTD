@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import authRouter from './routes/auth.js'
+import favoritesRouter from './routes/favorites.js'
 
 const app = express()
 
@@ -11,6 +12,7 @@ app.use(cors({
 app.use(express.json())
 
 app.use('/api/auth', authRouter)
+app.use('/api/favorites', favoritesRouter)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
