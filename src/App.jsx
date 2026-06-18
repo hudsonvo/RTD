@@ -9,6 +9,8 @@ import RoutesPage from './pages/Routes'
 import Alerts from './pages/Alerts'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import Account from './pages/Account'
+import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
   return (
@@ -26,6 +28,7 @@ export default function App() {
               <Route path="/alerts"    element={<Alerts />} />
               <Route path="/login"     element={<Login />} />
               <Route path="/register"  element={<Register />} />
+              <Route path="/account"   element={<ProtectedRoute><Account /></ProtectedRoute>} />
             </Routes>
           </main>
         </div>

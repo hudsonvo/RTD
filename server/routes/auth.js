@@ -113,4 +113,66 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user })
 })
 
+// PUT /api/auth/password
+router.put('/password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body ?? {}
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password are required' })
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' })
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.id]
+    )
+    const match = await bcrypt.compare(currentPassword, rows[0].password_hash)
+    if (!match) {
+      return res.status(401).json({ error: 'Current password is incorrect' })
+    }
+
+    const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS)
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id])
+
+    // Invalidate all other sessions so other devices are signed out
+    await pool.query(
+      'DELETE FROM sessions WHERE user_id = $1 AND token_hash != $2',
+      [req.user.id, req.tokenHash]
+    )
+
+    res.json({ message: 'Password updated successfully' })
+  } catch (err) {
+    console.error('password change error:', err.message)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// DELETE /api/auth/account
+router.delete('/account', requireAuth, async (req, res) => {
+  const { password } = req.body ?? {}
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required to delete your account' })
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.user.id]
+    )
+    const match = await bcrypt.compare(password, rows[0].password_hash)
+    if (!match) {
+      return res.status(401).json({ error: 'Incorrect password' })
+    }
+
+    // ON DELETE CASCADE removes sessions, favorites, and password_reset_tokens
+    await pool.query('DELETE FROM users WHERE id = $1', [req.user.id])
+    res.status(204).send()
+  } catch (err) {
+    console.error('account deletion error:', err.message)
+    res.status(500).json({ error: 'Server error' })
+  }
+})
+
 export default router

@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { MapPin, Navigation, Map, AlertTriangle, Bus, Clock, LogOut, User } from 'lucide-react'
+import { MapPin, Navigation, Map, AlertTriangle, Bus, Clock, LogOut, UserCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const links = [
@@ -34,10 +34,13 @@ export default function Navbar() {
           <div className="ml-auto flex items-center gap-2">
             {user ? (
               <>
-                <div className="hidden sm:flex items-center gap-1.5 text-sm text-blue-200">
-                  <User size={14} />
-                  <span className="max-w-[160px] truncate">{user.email}</span>
-                </div>
+                <Link
+                  to="/account"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-blue-200 hover:bg-blue-700 text-sm transition-colors"
+                >
+                  <UserCircle size={15} />
+                  <span className="max-w-[140px] truncate">{user.email}</span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 text-sm font-medium transition-colors"
