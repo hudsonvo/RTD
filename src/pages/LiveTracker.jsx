@@ -355,6 +355,10 @@ function LineFilter({ filters, activeFilter, totalCount, onSelect }) {
           value={query}
           onChange={e => { setQuery(e.target.value); setBrowseOpen(false) }}
           onFocus={() => setBrowseOpen(false)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && suggestions.length > 0) selectFilter(suggestions[0].key)
+            if (e.key === 'Backspace' && query === '' && activeFilterObj) clear()
+          }}
           className="w-full pl-9 pr-8 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
         {(query || activeFilterObj) && (
