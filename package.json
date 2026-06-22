@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "server": "node --env-file=.env server/index.js",
     "server:dev": "node --watch --env-file=.env server/index.js",
+    "admin:create": "node --env-file=.env scripts/create-admin.js",
     "update-gtfs": "node scripts/fetch-gtfs-static.js",
     "otp:setup": "bash scripts/setup-otp.sh",
     "otp:build": "bash scripts/build-otp.sh",

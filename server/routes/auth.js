@@ -44,7 +44,7 @@ router.post('/register', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS)
     const { rows } = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, is_admin',
       [normalizedEmail, passwordHash]
     )
     const user = rows[0]
@@ -55,7 +55,7 @@ router.post('/register', async (req, res) => {
       [user.id, hashToken(token), sessionExpiry()]
     )
 
-    res.status(201).json({ user: { id: user.id, email: user.email }, token })
+    res.status(201).json({ user: { id: user.id, email: user.email, isAdmin: user.is_admin }, token })
   } catch (err) {
     console.error('register error:', err.message)
     res.status(500).json({ error: 'Server error' })
@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      'SELECT id, email, password_hash FROM users WHERE email = $1 AND is_active = TRUE',
+      'SELECT id, email, password_hash, is_admin FROM users WHERE email = $1 AND is_active = TRUE',
       [email.trim().toLowerCase()]
     )
 
@@ -91,7 +91,7 @@ router.post('/login', async (req, res) => {
       [user.id, hashToken(token), sessionExpiry()]
     )
 
-    res.json({ user: { id: user.id, email: user.email }, token })
+    res.json({ user: { id: user.id, email: user.email, isAdmin: user.is_admin }, token })
   } catch (err) {
     console.error('login error:', err.message)
     res.status(500).json({ error: 'Server error' })
@@ -110,7 +110,8 @@ router.post('/logout', requireAuth, async (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: req.user })
+  const { id, email, is_admin } = req.user
+  res.json({ user: { id, email, isAdmin: is_admin } })
 })
 
 // PUT /api/auth/password
