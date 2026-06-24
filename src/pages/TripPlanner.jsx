@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Navigation, Clock, ArrowRight, RotateCcw, MapPin,
   Bus, Train, Zap, Car, ParkingSquare, Footprints, X, AlertCircle,
@@ -256,12 +256,15 @@ function makeEndpointIcon(color, letter) {
 const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'A')
 const DEST_ICON   = makeEndpointIcon('#EF4444', 'B')
 
-function FitBounds({ points }) {
+function FitBounds({ points, once = false }) {
   const map = useMap()
+  const hasFit = useRef(false)
   useEffect(() => {
     if (!points?.length) return
+    if (once && hasFit.current) return
     map.fitBounds(points, { padding: [48, 48], maxZoom: 15 })
-  }, [points, map])
+    hasFit.current = true
+  }, [points, map, once])
   return null
 }
 
@@ -422,6 +425,93 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
   )
 }
 
+// ── Park & Ride map ───────────────────────────────────────────────────────────
+
+function PRMarker({ station, isHovered, routes }) {
+  const markerRef = useRef(null)
+
+  useEffect(() => {
+    if (!markerRef.current) return
+    if (isHovered) markerRef.current.openPopup()
+    else markerRef.current.closePopup()
+  }, [isHovered])
+
+  const pct = Math.round((station.freeSpaces / station.spaces) * 100)
+  const availColor = pct > 30 ? '#10B981' : pct > 10 ? '#F59E0B' : '#EF4444'
+  const sz = isHovered ? 32 : 24
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${sz}px;height:${sz}px;background:#6366F1;
+      border:2.5px solid white;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      color:white;font-size:${isHovered ? 14 : 11}px;font-weight:800;
+      box-shadow:0 2px 8px rgba(0,0,0,.3);
+    ">P</div>`,
+    iconSize: [sz, sz],
+    iconAnchor: [sz / 2, sz / 2],
+  })
+
+  return (
+    <>
+      {isHovered && (
+        <CircleMarker
+          center={[station.lat, station.lon]}
+          radius={22}
+          pathOptions={{ color: '#6366F1', fillColor: '#6366F1', fillOpacity: 0.12, weight: 1.5 }}
+        />
+      )}
+      <Marker ref={markerRef} position={[station.lat, station.lon]} icon={icon}>
+        <Popup closeButton={false} autoPan={false} offset={[0, -6]}>
+          <div style={{ minWidth: 150, fontSize: 12, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, color: '#111827' }}>{station.name}</div>
+            <div style={{ color: availColor, fontWeight: 600 }}>{station.freeSpaces} / {station.spaces} spaces free</div>
+            {routes.length > 0 && (
+              <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+                {routes.map(r => (
+                  <span key={r.id} style={{
+                    background: r.color, color: 'white', borderRadius: 999,
+                    padding: '1px 6px', fontSize: 10, fontWeight: 700,
+                  }}>{r.shortName}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </Popup>
+      </Marker>
+    </>
+  )
+}
+
+function ParkRideMap({ stations, hoveredId }) {
+  // Static stations — compute fit points once to avoid re-fitting on hover changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fitPoints = useMemo(() => stations.map(s => [s.lat, s.lon]), [])
+
+  return (
+    <MapContainer
+      center={[39.7392, -104.9903]}
+      zoom={10}
+      style={{ height: 220, width: '100%' }}
+      scrollWheelZoom={false}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <FitBounds points={fitPoints} once />
+      {stations.map(s => (
+        <PRMarker
+          key={s.id}
+          station={s}
+          isHovered={s.id === hoveredId}
+          routes={ROUTES.filter(r => s.routeIds.includes(r.id))}
+        />
+      ))}
+    </MapContainer>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function TripPlanner() {
@@ -440,6 +530,7 @@ export default function TripPlanner() {
   const [selectedTripIndex, setSelectedTripIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [hoveredPRId, setHoveredPRId] = useState(null)
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -610,25 +701,37 @@ export default function TripPlanner() {
         const list = showSuggested ? suggested : PARK_AND_RIDE.slice(0, 4)
 
         return (
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-3">
-              <ParkingSquare size={13} />
-              {showSuggested ? 'Park & Rides on your route' : 'Park & Ride locations'}
-            </h2>
-            {hasBothCoords && !showSuggested && (
-              <p className="text-xs text-gray-400 mb-3">
-                No Park &amp; Ride stations found along this route — OTP will choose the best option automatically.
-              </p>
-            )}
-            <div className="space-y-0">
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-4 pt-4 pb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <ParkingSquare size={13} />
+                {showSuggested ? 'Park & Rides on your route' : 'Park & Ride locations'}
+              </h2>
+              {hasBothCoords && !showSuggested && (
+                <p className="text-xs text-gray-400 mt-1">
+                  No Park &amp; Ride stations found along this route — OTP will choose the best option automatically.
+                </p>
+              )}
+            </div>
+
+            {/* Embedded map — hover a station below to see it highlighted */}
+            <ParkRideMap stations={list} hoveredId={hoveredPRId} />
+
+            <div>
               {list.map((pr, i) => {
                 const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
                 const availColor = pct > 30 ? 'text-emerald-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
                 const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
+                const isHovered = hoveredPRId === pr.id
                 return (
-                  <div key={pr.id} className={`py-3 text-xs ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                  <div
+                    key={pr.id}
+                    className={`px-4 py-3 text-xs cursor-default transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isHovered ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                    onMouseEnter={() => setHoveredPRId(pr.id)}
+                    onMouseLeave={() => setHoveredPRId(null)}
+                  >
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className="font-semibold text-gray-800">{pr.name}</div>
+                      <div className={`font-semibold ${isHovered ? 'text-indigo-700' : 'text-gray-800'}`}>{pr.name}</div>
                       {pr.driveDist != null && (
                         <span className="text-gray-400 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
                       )}
