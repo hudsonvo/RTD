@@ -260,7 +260,7 @@ function FitBounds({ points }) {
   const map = useMap()
   useEffect(() => {
     if (!points?.length) return
-    map.fitBounds(points, { padding: [44, 44], maxZoom: 15 })
+    map.fitBounds(points, { padding: [48, 48], maxZoom: 15 })
   }, [points, map])
   return null
 }
@@ -277,89 +277,114 @@ function tripAllPoints(trip) {
   return pts
 }
 
-function TripLegs({ trip }) {
+// Draws one trip's legs. selected = full color; unselected = faded.
+function TripLegs({ trip, selected, onSelect }) {
   return trip.legs.map((leg, i) => {
     const path = leg.geometry?.length
       ? leg.geometry
       : [leg.fromCoords, leg.toCoords].filter(Boolean)
     if (!path.length) return null
 
-    if (leg.type === 'walk' || leg.type === 'drive') {
-      return (
-        <Polyline
-          key={i}
-          positions={path}
-          color={leg.type === 'drive' ? '#374151' : '#9CA3AF'}
-          weight={3}
-          dashArray="6 8"
-          opacity={0.8}
-        />
-      )
-    }
+    const isWalkOrDrive = leg.type === 'walk' || leg.type === 'drive'
+    const color = isWalkOrDrive
+      ? (leg.type === 'drive' ? '#374151' : '#9CA3AF')
+      : (leg.routeColor ?? '#3B82F6')
 
-    const color = leg.routeColor ?? '#3B82F6'
     return (
-      <Polyline key={i} positions={path} color={color} weight={5} opacity={0.85} />
+      <Polyline
+        key={i}
+        positions={path}
+        color={color}
+        weight={selected ? (isWalkOrDrive ? 3 : 5) : 4}
+        opacity={selected ? (isWalkOrDrive ? 0.8 : 0.9) : 0.25}
+        dashArray={isWalkOrDrive ? '6 8' : undefined}
+        eventHandlers={onSelect ? { click: onSelect } : {}}
+      />
     )
   })
 }
 
+// Transfer dots only for the selected route
 function TransferMarkers({ trip }) {
-  const points = trip.legs
+  return trip.legs
     .map((leg, i) => i > 0 ? leg.fromCoords : null)
     .filter(Boolean)
-  return points.map((pt, i) => (
-    <CircleMarker
-      key={i}
-      center={pt}
-      radius={5}
-      pathOptions={{ color: '#fff', fillColor: '#6B7280', fillOpacity: 1, weight: 2 }}
-    />
-  ))
+    .map((pt, i) => (
+      <CircleMarker
+        key={i}
+        center={pt}
+        radius={5}
+        pathOptions={{ color: '#fff', fillColor: '#6B7280', fillOpacity: 1, weight: 2 }}
+      />
+    ))
+}
+
+// Small pill label at the midpoint of an unselected route
+function AltRouteLabel({ trip, onClick }) {
+  const pts = tripAllPoints(trip)
+  if (!pts.length) return null
+  const mid = pts[Math.floor(pts.length / 2)]
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      background:rgba(255,255,255,0.93);
+      border:1.5px solid #E5E7EB;
+      border-radius:10px;
+      padding:3px 8px;
+      font-size:11px;
+      font-weight:700;
+      color:#374151;
+      white-space:nowrap;
+      box-shadow:0 1px 5px rgba(0,0,0,0.15);
+      cursor:pointer;
+    ">${trip.duration}</div>`,
+    iconSize: [null, null],
+    iconAnchor: [0, 0],
+  })
+  return <Marker position={mid} icon={icon} eventHandlers={{ click: onClick }} />
 }
 
 function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectIndex }) {
   if (!fromCoords || !toCoords || !trips?.length) return null
+
   const selected = trips[selectedIndex] ?? trips[0]
-  const allPoints = tripAllPoints(selected)
   const transitLegs = selected.legs.filter(l => l.type === 'transit')
+
+  // Fit to the union of all trips so all routes are visible at once
+  const allPoints = trips.flatMap(tripAllPoints)
+  const fitPoints = allPoints.length
+    ? allPoints
+    : [[fromCoords.lat, fromCoords.lon], [toCoords.lat, toCoords.lon]]
 
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-      {/* Trip selector tabs */}
-      {trips.length > 1 && (
-        <div className="flex border-b border-gray-100">
-          {trips.map((trip, i) => (
-            <button
-              key={i}
-              onClick={() => onSelectIndex(i)}
-              className={`flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2 ${
-                selectedIndex === i
-                  ? 'text-blue-600 border-blue-600 bg-blue-50'
-                  : 'text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              Option {i + 1} · {trip.duration}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Map */}
       <MapContainer
         center={[fromCoords.lat, fromCoords.lon]}
         zoom={12}
-        style={{ height: 360, width: '100%' }}
+        style={{ height: 380, width: '100%' }}
         scrollWheelZoom
-        key={`${fromCoords.lat},${toCoords.lat},${selectedIndex}`}
+        key={`${fromCoords.lat},${toCoords.lat}`}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds points={allPoints.length ? allPoints : [[fromCoords.lat, fromCoords.lon], [toCoords.lat, toCoords.lon]]} />
-        <TripLegs trip={selected} />
+        <FitBounds points={fitPoints} />
+
+        {/* Unselected routes behind — faded, clickable */}
+        {trips.map((trip, i) => i === selectedIndex ? null : (
+          <TripLegs key={i} trip={trip} selected={false} onSelect={() => onSelectIndex(i)} />
+        ))}
+
+        {/* Duration label on each alternative */}
+        {trips.map((trip, i) => i === selectedIndex ? null : (
+          <AltRouteLabel key={`lbl-${i}`} trip={trip} onClick={() => onSelectIndex(i)} />
+        ))}
+
+        {/* Selected route on top — full color */}
+        <TripLegs trip={selected} selected onSelect={null} />
         <TransferMarkers trip={selected} />
+
         <Marker position={[fromCoords.lat, fromCoords.lon]} icon={ORIGIN_ICON}>
           <Popup><strong>Origin</strong></Popup>
         </Marker>
@@ -368,7 +393,7 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
         </Marker>
       </MapContainer>
 
-      {/* Trip summary bar */}
+      {/* Summary bar */}
       <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
         <span className="font-bold text-gray-800 text-sm">{selected.duration}</span>
         <span className="text-gray-300">·</span>
@@ -388,6 +413,9 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
               ))}
             </div>
           </>
+        )}
+        {trips.length > 1 && (
+          <span className="ml-auto text-gray-300 italic">tap a route to switch</span>
         )}
       </div>
     </div>
