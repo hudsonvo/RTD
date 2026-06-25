@@ -289,10 +289,16 @@ function TripLegs({ trip, selected, onSelect }) {
     if (!path.length) return null
 
     const isWalkOrDrive = leg.type === 'walk' || leg.type === 'drive'
-    // Unselected transit: use a fixed medium gray so faded routes are always readable
-    const color = isWalkOrDrive
-      ? '#9CA3AF'
-      : (selected ? (leg.routeColor ?? '#3B82F6') : '#6B7280')
+    let color
+    if (!selected) {
+      color = '#9CA3AF'  // all unselected legs unified gray
+    } else if (leg.type === 'drive') {
+      color = '#1E3A5F'  // dark navy for driving leg
+    } else if (leg.type === 'walk') {
+      color = '#9CA3AF'  // light gray for walking
+    } else {
+      color = leg.routeColor ?? '#3B82F6'
+    }
 
     return (
       <Polyline
