@@ -486,7 +486,7 @@ function PRSelectMarker({ station, isSelected, onSelect }) {
   )
 }
 
-function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, trip }) {
+function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPlanVia, trip }) {
   const hasBothCoords = !!(fromCoords && toCoords)
 
   const stations = useMemo(() => {
@@ -579,12 +579,13 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, trip 
               return (
                 <div
                   key={pr.id}
-                  className={`flex items-center gap-3 px-4 py-3 text-xs transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSel ? 'bg-indigo-50' : ''}`}
+                  onClick={() => onSelectPR(pr)}
+                  className={`flex items-center gap-3 px-4 py-3 text-xs cursor-pointer transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSel ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
                 >
                   {/* Station info */}
                   <div className="flex-1 min-w-0">
                     <div className={`font-semibold mb-1 ${isSel ? 'text-indigo-700' : 'text-gray-800'}`}>{pr.name}</div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex gap-1">
                         {routes.map(r => (
                           <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
@@ -599,13 +600,13 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, trip 
                     </div>
                   </div>
 
-                  {/* Select button */}
+                  {/* Select = plan route via this station */}
                   <button
                     type="button"
-                    onClick={() => onSelectPR(isSel ? null : pr)}
+                    onClick={e => { e.stopPropagation(); onPlanVia(pr) }}
                     className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       isSel
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
@@ -723,7 +724,44 @@ export default function TripPlanner() {
 
   function handlePRSelect(pr) {
     setSelectedPR(pr)
-    setTrips(null)  // reset route when station changes
+    setTrips(null)
+  }
+
+  async function handlePlanVia(pr) {
+    setSelectedPR(pr)
+    setTrips(null)
+    setLoading(true)
+    setError(null)
+
+    try {
+      let fCoords = fromCoords
+      let tCoords = toCoords
+      if (!fCoords) {
+        if (!from) throw new Error('Enter an origin first')
+        const results = await geocode(from)
+        if (!results.length) throw new Error(`Could not find location: "${from}"`)
+        fCoords = results[0]; setFromCoords(fCoords)
+      }
+      if (!tCoords) {
+        if (!to) throw new Error('Enter a destination first')
+        const results = await geocode(to)
+        if (!results.length) throw new Error(`Could not find location: "${to}"`)
+        tCoords = results[0]; setToCoords(tCoords)
+      }
+
+      const result = await planCombinedDriveTransit({
+        fromLat: fCoords.lat, fromLon: fCoords.lon,
+        prLat: pr.lat, prLon: pr.lon,
+        toLat: tCoords.lat, toLon: tCoords.lon,
+        dateTime: timeMode === 'now' ? null : datetime,
+        arriveBy: timeMode === 'arrive-by',
+      })
+      setTrips(result)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function handleSwap() {
@@ -853,6 +891,7 @@ export default function TripPlanner() {
           toCoords={toCoords}
           selectedPR={selectedPR}
           onSelectPR={handlePRSelect}
+          onPlanVia={handlePlanVia}
           trip={trips?.[0] ?? null}
         />
       )}
