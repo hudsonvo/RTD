@@ -577,32 +577,41 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, trip 
               const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
               const isSel = selectedPR?.id === pr.id
               return (
-                <button
+                <div
                   key={pr.id}
-                  type="button"
-                  onClick={() => onSelectPR(pr)}
-                  className={`w-full text-left px-4 py-3 text-xs transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSel ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                  className={`flex items-center gap-3 px-4 py-3 text-xs transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSel ? 'bg-indigo-50' : ''}`}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className={`font-semibold flex items-center gap-1.5 ${isSel ? 'text-indigo-700' : 'text-gray-800'}`}>
-                      {isSel && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
-                      {pr.name}
+                  {/* Station info */}
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-semibold mb-1 ${isSel ? 'text-indigo-700' : 'text-gray-800'}`}>{pr.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        {routes.map(r => (
+                          <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
+                            {r.shortName}
+                          </span>
+                        ))}
+                      </div>
+                      <span className={`font-medium ${availColor}`}>{pr.freeSpaces} spaces free</span>
+                      {pr.driveDist != null && (
+                        <span className="text-gray-400">{pr.driveDist.toFixed(1)} km</span>
+                      )}
                     </div>
-                    {pr.driveDist != null && (
-                      <span className="text-gray-400 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
-                    )}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-1">
-                      {routes.map(r => (
-                        <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
-                          {r.shortName}
-                        </span>
-                      ))}
-                    </div>
-                    <span className={`font-semibold ${availColor}`}>{pr.freeSpaces} spaces free</span>
-                  </div>
-                </button>
+
+                  {/* Select button */}
+                  <button
+                    type="button"
+                    onClick={() => onSelectPR(isSel ? null : pr)}
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      isSel
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isSel ? '✓ Selected' : 'Select'}
+                  </button>
+                </div>
               )
             })}
           </div>
