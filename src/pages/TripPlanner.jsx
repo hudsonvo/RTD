@@ -600,18 +600,23 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPla
                     </div>
                   </div>
 
-                  {/* Select = plan route via this station */}
-                  <button
-                    type="button"
-                    onClick={e => { e.stopPropagation(); onPlanVia(pr) }}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      isSel
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {isSel ? '✓ Selected' : 'Select'}
-                  </button>
+                  {isSel ? (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onPlanVia(pr) }}
+                      className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                    >
+                      Plan Route
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onSelectPR(pr) }}
+                      className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                    >
+                      Select
+                    </button>
+                  )}
                 </div>
               )
             })}
