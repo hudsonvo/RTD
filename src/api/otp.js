@@ -40,6 +40,8 @@ const DRIVE_TRANSIT_MODES = [
   { mode: 'TRAM' }, { mode: 'RAIL' }, { mode: 'SUBWAY' },
 ]
 
+const DRIVE_ONLY_MODES = [{ mode: 'CAR' }]
+
 // Decode Google Polyline Algorithm encoded string → [[lat, lon], ...]
 export function decodePolyline(encoded) {
   if (!encoded) return []
@@ -57,15 +59,16 @@ export function decodePolyline(encoded) {
   return coords
 }
 
-export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries = 3, dateTime = null, arriveBy = false, driveTransit = false }) {
+export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries = 3, dateTime = null, arriveBy = false, driveTransit = false, transportModes = null }) {
   const epochMs = dateTime ? new Date(dateTime).getTime() : null
+  const modes = transportModes ?? (driveTransit ? DRIVE_TRANSIT_MODES : null)
   const variables = {
     from: { lat: fromLat, lon: fromLon },
     to:   { lat: toLat,   lon: toLon   },
     numItineraries,
     arriveBy,
-    ...(driveTransit ? { transportModes: DRIVE_TRANSIT_MODES } : {}),
-    ...(epochMs      ? { dateTime: epochMs } : {}),
+    ...(modes   ? { transportModes: modes } : {}),
+    ...(epochMs ? { dateTime: epochMs }     : {}),
   }
 
   let res
@@ -73,7 +76,7 @@ export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries 
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: buildPlanQuery(!!epochMs, driveTransit), variables }),
+      body: JSON.stringify({ query: buildPlanQuery(!!epochMs, !!modes), variables }),
     })
   } catch {
     throw new Error('OpenTripPlanner server is not running — start it with: npm run otp:serve')
@@ -91,6 +94,30 @@ export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries 
   }
 
   return json.data.plan.itineraries
+}
+
+// Plans drive (origin→P&R) + transit (P&R→destination) as two OTP calls and
+// merges the legs into one combined itinerary.
+export async function planCombinedDriveTransit({ fromLat, fromLon, prLat, prLon, toLat, toLon, dateTime, arriveBy }) {
+  const [driveItins, transitItins] = await Promise.all([
+    planTrip({ fromLat, fromLon, toLat: prLat, toLon: prLon, numItineraries: 1, transportModes: DRIVE_ONLY_MODES }),
+    planTrip({ fromLat: prLat, fromLon: prLon, toLat, toLon, numItineraries: 1, dateTime, arriveBy }),
+  ])
+
+  const driveF   = formatItinerary(driveItins[0],   'drive-leg')
+  const transitF = formatItinerary(transitItins[0], 'transit-leg')
+
+  const totalMin = Math.round((driveItins[0].duration + transitItins[0].duration) / 60)
+  const departureMs = driveItins[0].startTime
+  const arrivalMs   = departureMs + (driveItins[0].duration + transitItins[0].duration) * 1000
+
+  return [{
+    id: 'combined',
+    duration:  `${totalMin} min`,
+    departure: new Date(departureMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    arrival:   new Date(arrivalMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    legs: [...driveF.legs, ...transitF.legs],
+  }]
 }
 
 export function formatItinerary(itin, id) {
