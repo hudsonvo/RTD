@@ -526,7 +526,7 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPla
         {/* Selectable P&R markers — hidden once route is shown */}
         {!trip && stations.map(s => (
           <PRSelectMarker
-            key={s.id}
+            key={`${s.id}-${selectedPR?.id === s.id}`}
             station={s}
             isSelected={selectedPR?.id === s.id}
             onSelect={() => onSelectPR(s)}
