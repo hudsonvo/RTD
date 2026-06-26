@@ -7,7 +7,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { ROUTES, PARK_AND_RIDE, POPULAR_LOCATIONS } from '../data/mockData'
-import { planTrip, formatItinerary } from '../api/otp'
+import { planTrip, planCombinedDriveTransit, formatItinerary } from '../api/otp'
 
 const ROUTE_TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
 const MODES = [
@@ -255,6 +255,7 @@ function makeEndpointIcon(color, letter) {
 
 const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'A')
 const DEST_ICON   = makeEndpointIcon('#EF4444', 'B')
+const PR_ICON     = makeEndpointIcon('#6366F1', 'P')
 
 function FitBounds({ points, once = false }) {
   const map = useMap()
@@ -432,44 +433,39 @@ function TripResultMap({ fromCoords, toCoords, trips, selectedIndex, onSelectInd
   )
 }
 
-// ── Park & Ride map ───────────────────────────────────────────────────────────
+// ── Drive + Transit unified panel ─────────────────────────────────────────────
 
-function PRMarker({ station, isHovered, routes }) {
-  const markerRef = useRef(null)
-
-  useEffect(() => {
-    if (!markerRef.current) return
-    if (isHovered) markerRef.current.openPopup()
-    else markerRef.current.closePopup()
-  }, [isHovered])
-
+function PRSelectMarker({ station, isSelected, onSelect }) {
   const pct = Math.round((station.freeSpaces / station.spaces) * 100)
   const availColor = pct > 30 ? '#10B981' : pct > 10 ? '#F59E0B' : '#EF4444'
-  const sz = isHovered ? 32 : 24
+  const sz = isSelected ? 34 : 26
+  const bg = isSelected ? '#6366F1' : '#818CF8'
   const icon = L.divIcon({
     className: '',
     html: `<div style="
-      width:${sz}px;height:${sz}px;background:#6366F1;
-      border:2.5px solid white;border-radius:50%;
+      width:${sz}px;height:${sz}px;background:${bg};
+      border:${isSelected ? 3 : 2}px solid white;border-radius:50%;
       display:flex;align-items:center;justify-content:center;
-      color:white;font-size:${isHovered ? 14 : 11}px;font-weight:800;
-      box-shadow:0 2px 8px rgba(0,0,0,.3);
+      color:white;font-size:${isSelected ? 14 : 11}px;font-weight:800;
+      box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;
     ">P</div>`,
     iconSize: [sz, sz],
     iconAnchor: [sz / 2, sz / 2],
   })
 
+  const routes = ROUTES.filter(r => station.routeIds.includes(r.id))
+
   return (
     <>
-      {isHovered && (
+      {isSelected && (
         <CircleMarker
           center={[station.lat, station.lon]}
-          radius={22}
-          pathOptions={{ color: '#6366F1', fillColor: '#6366F1', fillOpacity: 0.12, weight: 1.5 }}
+          radius={24}
+          pathOptions={{ color: '#6366F1', fillColor: '#6366F1', fillOpacity: 0.12, weight: 2 }}
         />
       )}
-      <Marker ref={markerRef} position={[station.lat, station.lon]} icon={icon}>
-        <Popup closeButton={false} autoPan={false} offset={[0, -6]}>
+      <Marker position={[station.lat, station.lon]} icon={icon} eventHandlers={{ click: onSelect }}>
+        <Popup closeButton={false} offset={[0, -8]}>
           <div style={{ minWidth: 150, fontSize: 12, lineHeight: 1.6 }}>
             <div style={{ fontWeight: 700, color: '#111827' }}>{station.name}</div>
             <div style={{ color: availColor, fontWeight: 600 }}>{station.freeSpaces} / {station.spaces} spaces free</div>
@@ -490,32 +486,158 @@ function PRMarker({ station, isHovered, routes }) {
   )
 }
 
-function ParkRideMap({ stations, hoveredId }) {
-  // Static stations — compute fit points once to avoid re-fitting on hover changes
+function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, trip }) {
+  const hasBothCoords = !!(fromCoords && toCoords)
+
+  const stations = useMemo(() => {
+    if (!hasBothCoords) return PARK_AND_RIDE
+    const suggested = getSuggestedParkAndRides(fromCoords.lat, fromCoords.lon, toCoords.lat, toCoords.lon)
+    return suggested.length > 0 ? suggested : PARK_AND_RIDE.slice(0, 6)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const fitPoints = useMemo(() => stations.map(s => [s.lat, s.lon]), [])
+  }, [hasBothCoords, fromCoords?.lat, fromCoords?.lon, toCoords?.lat, toCoords?.lon])
+
+  // Fit key changes when state transitions so FitBounds re-runs
+  const fitKey  = trip ? 'route' : hasBothCoords ? 'area' : 'stations'
+  const fitPoints = useMemo(() => {
+    if (trip) return tripAllPoints(trip)
+    const prs = stations.map(s => [s.lat, s.lon])
+    if (!hasBothCoords) return prs
+    return [[fromCoords.lat, fromCoords.lon], [toCoords.lat, toCoords.lon], ...prs]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey])
+
+  const transitLegs = trip ? trip.legs.filter(l => l.type === 'transit') : []
 
   return (
-    <MapContainer
-      center={[39.7392, -104.9903]}
-      zoom={10}
-      style={{ height: 220, width: '100%' }}
-      scrollWheelZoom={false}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <FitBounds points={fitPoints} once />
-      {stations.map(s => (
-        <PRMarker
-          key={s.id}
-          station={s}
-          isHovered={s.id === hoveredId}
-          routes={ROUTES.filter(r => s.routeIds.includes(r.id))}
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      {/* Single map for the whole flow */}
+      <MapContainer
+        center={[39.7392, -104.9903]}
+        zoom={10}
+        style={{ height: 360, width: '100%' }}
+        scrollWheelZoom
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-      ))}
-    </MapContainer>
+        <FitBounds key={fitKey} points={fitPoints} />
+
+        {/* Selectable P&R markers — hidden once route is shown */}
+        {!trip && stations.map(s => (
+          <PRSelectMarker
+            key={s.id}
+            station={s}
+            isSelected={selectedPR?.id === s.id}
+            onSelect={() => onSelectPR(s)}
+          />
+        ))}
+
+        {/* Route polylines + P&R landmark once planned */}
+        {trip && (
+          <>
+            <TripLegs trip={trip} selected onSelect={null} />
+            <TransferMarkers trip={trip} />
+            {selectedPR && (
+              <Marker position={[selectedPR.lat, selectedPR.lon]} icon={PR_ICON}>
+                <Popup>{selectedPR.name}</Popup>
+              </Marker>
+            )}
+          </>
+        )}
+
+        {fromCoords && (
+          <Marker position={[fromCoords.lat, fromCoords.lon]} icon={ORIGIN_ICON}>
+            <Popup><strong>Origin</strong></Popup>
+          </Marker>
+        )}
+        {toCoords && (
+          <Marker position={[toCoords.lat, toCoords.lon]} icon={DEST_ICON}>
+            <Popup><strong>Destination</strong></Popup>
+          </Marker>
+        )}
+      </MapContainer>
+
+      {!trip ? (
+        /* ── Station picker ── */
+        <>
+          <div className="px-4 pt-3 pb-1.5 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+              <ParkingSquare size={13} />
+              {hasBothCoords ? 'Park & Rides on your route' : 'Park & Ride locations'}
+            </p>
+            {selectedPR && (
+              <span className="text-xs text-indigo-600 font-medium">Selected — click Plan Route ↑</span>
+            )}
+          </div>
+          <div>
+            {stations.map((pr, i) => {
+              const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
+              const availColor = pct > 30 ? 'text-emerald-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
+              const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
+              const isSel = selectedPR?.id === pr.id
+              return (
+                <button
+                  key={pr.id}
+                  type="button"
+                  onClick={() => onSelectPR(pr)}
+                  className={`w-full text-left px-4 py-3 text-xs transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSel ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className={`font-semibold flex items-center gap-1.5 ${isSel ? 'text-indigo-700' : 'text-gray-800'}`}>
+                      {isSel && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
+                      {pr.name}
+                    </div>
+                    {pr.driveDist != null && (
+                      <span className="text-gray-400 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1">
+                      {routes.map(r => (
+                        <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
+                          {r.shortName}
+                        </span>
+                      ))}
+                    </div>
+                    <span className={`font-semibold ${availColor}`}>{pr.freeSpaces} spaces free</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        /* ── Trip summary bar ── */
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+          <span className="font-bold text-gray-800 text-sm">{trip.duration}</span>
+          <span className="text-gray-300">·</span>
+          <span>{trip.departure} → {trip.arrival}</span>
+          {transitLegs.length > 0 && (
+            <>
+              <span className="text-gray-300">·</span>
+              <div className="flex gap-1">
+                {transitLegs.map((l, i) => (
+                  <span key={i} className="px-2 py-0.5 rounded-full text-white font-bold"
+                    style={{ backgroundColor: l.routeColor ?? '#3B82F6', fontSize: 10 }}>
+                    {l.routeId}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          <span className="text-gray-300">·</span>
+          <span className="text-indigo-600 font-medium">via {selectedPR?.name}</span>
+          <button
+            type="button"
+            onClick={() => onSelectPR(null)}
+            className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+          >
+            Change station
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -537,7 +659,7 @@ export default function TripPlanner() {
   const [selectedTripIndex, setSelectedTripIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [hoveredPRId, setHoveredPRId] = useState(null)
+  const [selectedPR, setSelectedPR] = useState(null)
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -562,22 +684,37 @@ export default function TripPlanner() {
         setToCoords(tCoords)
       }
 
-      const itineraries = await planTrip({
-        fromLat: fCoords.lat, fromLon: fCoords.lon,
-        toLat: tCoords.lat, toLon: tCoords.lon,
-        numItineraries: 3,
-        dateTime: timeMode === 'now' ? null : datetime,
-        arriveBy: timeMode === 'arrive-by',
-        driveTransit: mode === 'drive-transit',
-      })
-
-      setTrips(itineraries.map(formatItinerary))
-      setSelectedTripIndex(0)
+      if (mode === 'drive-transit') {
+        if (!selectedPR) return  // coords resolved; user now picks a station
+        const result = await planCombinedDriveTransit({
+          fromLat: fCoords.lat, fromLon: fCoords.lon,
+          prLat: selectedPR.lat, prLon: selectedPR.lon,
+          toLat: tCoords.lat, toLon: tCoords.lon,
+          dateTime: timeMode === 'now' ? null : datetime,
+          arriveBy: timeMode === 'arrive-by',
+        })
+        setTrips(result)
+      } else {
+        const itineraries = await planTrip({
+          fromLat: fCoords.lat, fromLon: fCoords.lon,
+          toLat: tCoords.lat, toLon: tCoords.lon,
+          numItineraries: 3,
+          dateTime: timeMode === 'now' ? null : datetime,
+          arriveBy: timeMode === 'arrive-by',
+        })
+        setTrips(itineraries.map((it, i) => formatItinerary(it, i)))
+        setSelectedTripIndex(0)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  function handlePRSelect(pr) {
+    setSelectedPR(pr)
+    setTrips(null)  // reset route when station changes
   }
 
   function handleSwap() {
@@ -603,7 +740,7 @@ export default function TripPlanner() {
             <button
               key={id}
               type="button"
-              onClick={() => { setMode(id); setTrips(null) }}
+              onClick={() => { setMode(id); setTrips(null); setSelectedPR(null) }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
                 mode === id
                   ? 'bg-blue-600 text-white'
@@ -673,10 +810,12 @@ export default function TripPlanner() {
           )}
           <button
             type="submit"
-            disabled={!from || !to || loading}
+            disabled={!from || !to || loading || (mode === 'drive-transit' && fromCoords && toCoords && !selectedPR)}
             className="ml-auto px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
           >
-            {loading ? 'Searching…' : 'Search'}
+            {loading ? 'Searching…'
+              : mode === 'drive-transit' && selectedPR ? 'Plan Route'
+              : 'Search'}
           </button>
         </div>
 
@@ -698,68 +837,16 @@ export default function TripPlanner() {
         </div>
       </form>
 
-      {/* Park & ride panel (drive-transit mode) */}
-      {mode === 'drive-transit' && !loading && (() => {
-        const hasBothCoords = fromCoords && toCoords
-        const suggested = hasBothCoords
-          ? getSuggestedParkAndRides(fromCoords.lat, fromCoords.lon, toCoords.lat, toCoords.lon)
-          : []
-        const showSuggested = hasBothCoords && suggested.length > 0
-        const list = showSuggested ? suggested : PARK_AND_RIDE.slice(0, 4)
-
-        return (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-4 pt-4 pb-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <ParkingSquare size={13} />
-                {showSuggested ? 'Park & Rides on your route' : 'Park & Ride locations'}
-              </h2>
-              {hasBothCoords && !showSuggested && (
-                <p className="text-xs text-gray-400 mt-1">
-                  No Park &amp; Ride stations found along this route — OTP will choose the best option automatically.
-                </p>
-              )}
-            </div>
-
-            {/* Embedded map — hover a station below to see it highlighted */}
-            <ParkRideMap stations={list} hoveredId={hoveredPRId} />
-
-            <div>
-              {list.map((pr, i) => {
-                const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
-                const availColor = pct > 30 ? 'text-emerald-600' : pct > 10 ? 'text-yellow-600' : 'text-red-600'
-                const routes = ROUTES.filter(r => pr.routeIds.includes(r.id))
-                const isHovered = hoveredPRId === pr.id
-                return (
-                  <div
-                    key={pr.id}
-                    className={`px-4 py-3 text-xs cursor-default transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isHovered ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
-                    onMouseEnter={() => setHoveredPRId(pr.id)}
-                    onMouseLeave={() => setHoveredPRId(null)}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className={`font-semibold ${isHovered ? 'text-indigo-700' : 'text-gray-800'}`}>{pr.name}</div>
-                      {pr.driveDist != null && (
-                        <span className="text-gray-400 shrink-0">{pr.driveDist.toFixed(1)} km drive</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex gap-1">
-                        {routes.map(r => (
-                          <span key={r.id} className="px-1.5 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: r.color, fontSize: '10px' }}>
-                            {r.shortName}
-                          </span>
-                        ))}
-                      </div>
-                      <span className={`font-semibold ${availColor}`}>{pr.freeSpaces} spaces free</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })()}
+      {/* Drive+Transit: unified station picker + map */}
+      {mode === 'drive-transit' && (
+        <DriveTransitPanel
+          fromCoords={fromCoords}
+          toCoords={toCoords}
+          selectedPR={selectedPR}
+          onSelectPR={handlePRSelect}
+          trip={trips?.[0] ?? null}
+        />
+      )}
 
       {/* Error */}
       {error && (
@@ -769,8 +856,8 @@ export default function TripPlanner() {
         </div>
       )}
 
-      {/* Results */}
-      {trips && (
+      {/* Transit-only results */}
+      {mode !== 'drive-transit' && trips && (
         <div className="space-y-3">
           <p className="text-xs text-gray-400 px-1">{trips.length} option{trips.length !== 1 ? 's' : ''} found — tap to expand</p>
           <TripResultMap
@@ -783,6 +870,13 @@ export default function TripPlanner() {
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             {trips.map((trip, i) => <TripCard key={trip.id} trip={trip} showDivider={i > 0} />)}
           </div>
+        </div>
+      )}
+
+      {/* Drive+Transit trip cards (below the unified panel) */}
+      {mode === 'drive-transit' && trips && (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          {trips.map((trip, i) => <TripCard key={trip.id} trip={trip} showDivider={i > 0} />)}
         </div>
       )}
     </div>
