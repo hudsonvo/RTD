@@ -237,24 +237,25 @@ function TripCard({ trip, showDivider }) {
 
 // ── Trip result map ────────────────────────────────────────────────────────────
 
-function makeEndpointIcon(color, letter) {
+function makeEndpointIcon(color, label) {
+  const w = Math.max(36, label.length * 9 + 20)
   return L.divIcon({
     className: '',
-    html: `<div style="display:flex;flex-direction:column;align-items:center">
-      <div style="background:${color};width:30px;height:30px;border-radius:50%;
-        border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:${w}px">
+      <div style="background:${color};width:100%;height:26px;border-radius:99px;
+        border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);
         display:flex;align-items:center;justify-content:center;
-        color:white;font-size:13px;font-weight:800;font-family:system-ui">${letter}</div>
+        color:white;font-size:11px;font-weight:800;font-family:system-ui;white-space:nowrap">${label}</div>
       <div style="width:3px;height:8px;background:${color};border-radius:0 0 2px 2px;margin-top:-1px"></div>
     </div>`,
-    iconSize: [30, 38],
-    iconAnchor: [15, 38],
-    popupAnchor: [0, -40],
+    iconSize: [w, 34],
+    iconAnchor: [w / 2, 34],
+    popupAnchor: [0, -36],
   })
 }
 
-const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'A')
-const DEST_ICON   = makeEndpointIcon('#EF4444', 'B')
+const ORIGIN_ICON = makeEndpointIcon('#22C55E', 'Start')
+const DEST_ICON   = makeEndpointIcon('#EF4444', 'End')
 const PR_ICON     = makeEndpointIcon('#6366F1', 'P')
 
 function FitBounds({ points, once = false }) {
