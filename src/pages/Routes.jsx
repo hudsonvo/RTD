@@ -11,7 +11,7 @@ const TYPE_LABEL = {
   'bus-rapid-transit': 'Bus Rapid Transit',
 }
 
-const FILTERS = ['all', 'bus', 'light-rail', 'commuter-rail', 'bus-rapid-transit']
+const FILTERS = ['all', 'bus', 'light-rail']
 
 export default function Routes() {
   const [searchParams] = useSearchParams()
