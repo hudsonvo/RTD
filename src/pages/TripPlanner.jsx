@@ -492,8 +492,7 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPla
 
   const stations = useMemo(() => {
     if (!hasBothCoords) return PARK_AND_RIDE
-    const suggested = getSuggestedParkAndRides(fromCoords.lat, fromCoords.lon, toCoords.lat, toCoords.lon)
-    return suggested.length > 0 ? suggested : PARK_AND_RIDE.slice(0, 6)
+    return getSuggestedParkAndRides(fromCoords.lat, fromCoords.lon, toCoords.lat, toCoords.lon)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasBothCoords, fromCoords?.lat, fromCoords?.lon, toCoords?.lat, toCoords?.lon])
 
@@ -571,6 +570,11 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPla
               <span className="text-xs text-indigo-600 font-medium">Selected — click Plan Route ↑</span>
             )}
           </div>
+          {hasBothCoords && stations.length === 0 && (
+            <p className="px-4 pb-4 text-xs text-gray-400">
+              No Park &amp; Ride stations found along this route — try a longer trip or different origin.
+            </p>
+          )}
           <div>
             {stations.map((pr, i) => {
               const pct = Math.round((pr.freeSpaces / pr.spaces) * 100)
