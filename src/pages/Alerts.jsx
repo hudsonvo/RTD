@@ -47,8 +47,6 @@ function AlertRow({ alert, showDivider }) {
 
   return (
     <div className={`flex items-start gap-3 px-4 py-4 ${showDivider ? 'border-t border-gray-100' : ''}`}>
-      {/* Severity accent line */}
-      <div className="w-0.5 self-stretch rounded-full shrink-0" style={{ backgroundColor: cfg.accent }} />
       <Icon size={16} className={`shrink-0 mt-0.5 ${cfg.iconColor}`} />
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-1">
