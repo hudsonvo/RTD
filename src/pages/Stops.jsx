@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Search, MapPin, Navigation, Star, RefreshCw, Loader, AlertCircle, ArrowRight, Clock, ChevronLeft } from 'lucide-react'
 import { useArrivalsAtStop, useNearbyStops } from '../hooks/useRTDFeeds'
-import { getStops, searchStops } from '../api/gtfsStatic'
+import { getStops, searchStops, getStopRoutes } from '../api/gtfs'
 import { useFavorites } from '../hooks/useFavorites'
 import { ROUTES } from '../data/mockData'
 
@@ -52,16 +53,45 @@ function ArrivalsBoard({ stop, onBack }) {
   const { arrivals, loading, error, lastUpdated, refresh } = useArrivalsAtStop(stop.id)
   const { isFavorite, toggle } = useFavorites()
   const fav = isFavorite('stop', stop.id)
+  const [stopRouteNames, setStopRouteNames] = useState([])
+
+  useEffect(() => {
+    getStopRoutes()
+      .then(sr => setStopRouteNames(sr[stop.id] ?? []))
+      .catch(() => {})
+  }, [stop.id])
 
   return (
     <div className="space-y-4">
       {/* Stop header */}
-      <div className="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center gap-2">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+      <div className="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-start gap-2">
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors mt-0.5">
           <ChevronLeft size={18} />
         </button>
-        <MapPin size={15} className="text-blue-500 shrink-0" />
-        <h2 className="font-semibold text-gray-900 flex-1 leading-tight">{stop.name}</h2>
+        <MapPin size={15} className="text-blue-500 shrink-0 mt-1" />
+        <div className="flex-1 min-w-0">
+          <h2 className="font-semibold text-gray-900 leading-tight">{stop.name}</h2>
+          {stopRouteNames.length > 0 && (
+            <div className="flex flex-col gap-1 mt-1.5">
+              {stopRouteNames.map(({ route: shortName, headsign }) => {
+                const route = findRoute(shortName)
+                return (
+                  <div key={shortName} className="flex items-center gap-1.5">
+                    <span
+                      className="px-1.5 py-0.5 rounded-full text-white font-bold shrink-0"
+                      style={{ backgroundColor: route?.color ?? '#6B7280', fontSize: 10 }}
+                    >
+                      {shortName}
+                    </span>
+                    {headsign && (
+                      <span className="text-xs text-gray-400 truncate">→ {headsign}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
         <button
           onClick={() => toggle({ type: 'stop', id: stop.id, name: stop.name })}
           className={`p-1.5 rounded-lg transition-colors ${fav ? 'text-yellow-500 hover:text-yellow-600' : 'text-gray-300 hover:text-gray-400'}`}
@@ -152,7 +182,7 @@ function ArrivalsBoard({ stop, onBack }) {
 }
 
 // ── Nearby stops list ─────────────────────────────────────────────────────────
-function NearbyStopsList({ stops, userLocation, onSelect }) {
+function NearbyStopsList({ stops, userLocation, onSelect, stopRoutes = {} }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
@@ -189,7 +219,27 @@ function NearbyStopsList({ stops, userLocation, onSelect }) {
             className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left ${i > 0 ? 'border-t border-gray-100' : ''}`}
           >
             <MapPin size={14} className="text-blue-400 shrink-0" />
-            <span className="flex-1 text-sm text-gray-900 truncate">{s.name}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-gray-900 truncate">{s.name}</div>
+              {(stopRoutes[s.id] ?? []).length > 0 && (
+                <div className="flex flex-col gap-0.5 mt-1">
+                  {(stopRoutes[s.id] ?? []).map(({ route: n, headsign }) => {
+                    const r = findRoute(n)
+                    return (
+                      <div key={n} className="flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded-full text-white font-bold shrink-0"
+                          style={{ backgroundColor: r?.color ?? '#6B7280', fontSize: 10 }}>
+                          {n}
+                        </span>
+                        {headsign && (
+                          <span className="text-xs text-gray-400 truncate">→ {headsign}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             <span className="text-xs text-gray-400 shrink-0">{s.dist}m</span>
             <ArrowRight size={13} className="text-gray-300 shrink-0" />
           </button>
@@ -201,17 +251,35 @@ function NearbyStopsList({ stops, userLocation, onSelect }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Stops() {
+  const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [selectedStop, setSelectedStop] = useState(null)
+  const [stopRoutes, setStopRoutes] = useState({})
   const { stops: nearbyStops, userLocation, locError, locLoading, locate } = useNearbyStops()
+
+  useEffect(() => {
+    getStopRoutes().then(setStopRoutes).catch(() => {})
+  }, [])
+
+  // Auto-select stop when navigated to with ?id=
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    getStops().then(stops => {
+      const s = stops[id]
+      if (s) setSelectedStop({ id, name: typeof s === 'string' ? s : s.name, lat: s.lat, lon: s.lon })
+    }).catch(() => {})
+  }, [searchParams])
 
   useEffect(() => {
     if (query.length < 2) { setSuggestions([]); return }
     getStops()
-      .then(stops => setSuggestions(searchStops(stops, query)))
+      .then(stops => setSuggestions(
+        searchStops(stops, query).filter(s => stopRoutes[s.id]?.length > 0)
+      ))
       .catch(() => setSuggestions([]))
-  }, [query])
+  }, [query, stopRoutes])
 
   function selectStop(stop) {
     setSelectedStop(stop)
@@ -243,17 +311,39 @@ export default function Stops() {
               />
               {suggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl z-50 overflow-hidden border border-gray-100">
-                  {suggestions.map(s => (
-                    <button
-                      key={s.id}
-                      onMouseDown={() => selectStop(s)}
-                      className="w-full flex items-center gap-2.5 px-4 py-3 text-sm hover:bg-gray-50 text-left border-b border-gray-100 last:border-0"
-                    >
-                      <MapPin size={13} className="text-blue-400 shrink-0" />
-                      <span className="flex-1 truncate">{s.name}</span>
-                      <span className="text-gray-400 text-xs shrink-0">#{s.id}</span>
-                    </button>
-                  ))}
+                  {suggestions.map(s => {
+                    const routeEntries = stopRoutes[s.id] ?? []
+                    return (
+                      <button
+                        key={s.id}
+                        onMouseDown={() => selectStop(s)}
+                        className="w-full flex items-start gap-2.5 px-4 py-3 text-sm hover:bg-gray-50 text-left border-b border-gray-100 last:border-0"
+                      >
+                        <MapPin size={13} className="text-blue-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate">{s.name}</div>
+                          {routeEntries.length > 0 && (
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              {routeEntries.map(({ route: n, headsign }) => {
+                                const r = findRoute(n)
+                                return (
+                                  <div key={n} className="flex items-center gap-1">
+                                    <span className="px-1.5 py-0.5 rounded-full text-white font-bold shrink-0"
+                                      style={{ backgroundColor: r?.color ?? '#6B7280', fontSize: 10 }}>
+                                      {n}
+                                    </span>
+                                    {headsign && (
+                                      <span className="text-xs text-gray-400 truncate">→ {headsign}</span>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -275,7 +365,12 @@ export default function Stops() {
           )}
 
           {nearbyStops && (
-            <NearbyStopsList stops={nearbyStops} userLocation={userLocation} onSelect={selectStop} />
+            <NearbyStopsList
+              stops={nearbyStops.filter(s => stopRoutes[s.id]?.length > 0)}
+              userLocation={userLocation}
+              onSelect={selectStop}
+              stopRoutes={stopRoutes}
+            />
           )}
 
           {!nearbyStops && !locLoading && (

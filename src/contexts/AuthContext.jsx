@@ -34,10 +34,10 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function register(email, password) {
+  async function register(email, password, name) {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, name }),
     })
     localStorage.setItem(TOKEN_KEY, data.token)
     setUser(data.user)

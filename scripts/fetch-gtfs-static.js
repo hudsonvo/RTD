@@ -142,15 +142,69 @@ async function main() {
     }
   }
 
+  // ── routes.txt → { routeId: shortName } ──────────────────────────────────
+  const routesEntry = zip.getEntry('routes.txt')
+  const routeShortNames = {}
+  if (routesEntry) {
+    const routeRows = parseCSV(routesEntry.getData().toString('utf8'))
+    for (const row of routeRows) {
+      if (row.route_id && row.route_short_name) {
+        routeShortNames[row.route_id] = row.route_short_name
+      }
+    }
+  }
+
+  // ── stop_times.txt → { stopId: [{ route, headsign }, ...] } ─────────────
+  // stop_times.txt can be millions of rows; use index-based parsing for speed.
+  const stopTimesEntry = zip.getEntry('stop_times.txt')
+  const stopRoutesMap = {}
+  if (stopTimesEntry) {
+    // Build trip_id → { shortName, headsign } from trips + directions already built
+    const tripToInfo = {}
+    for (const row of trips) {
+      if (row.trip_id && row.route_id) {
+        const shortName = routeShortNames[row.route_id] ?? null
+        const headsign = directionsMap[`${row.route_id}:${row.direction_id ?? '0'}`] ?? null
+        tripToInfo[row.trip_id] = { shortName, headsign }
+      }
+    }
+
+    const stLines = stopTimesEntry.getData().toString('utf8').replace(/\r/g, '').trim().split('\n')
+    const stHdr = parseLine(stLines[0])
+    const iTripId = stHdr.indexOf('trip_id')
+    const iStopId = stHdr.indexOf('stop_id')
+    for (let i = 1; i < stLines.length; i++) {
+      const v = parseLine(stLines[i])
+      const tripId = v[iTripId]
+      const stopId = v[iStopId]
+      const info = tripToInfo[tripId]
+      if (!stopId || !info?.shortName) continue
+      if (!stopRoutesMap[stopId]) stopRoutesMap[stopId] = new Map()
+      // First headsign seen for each route at this stop wins
+      if (!stopRoutesMap[stopId].has(info.shortName)) {
+        stopRoutesMap[stopId].set(info.shortName, info.headsign)
+      }
+    }
+  }
+  // Convert Maps → sorted arrays of { route, headsign }
+  const stopRoutesFinal = {}
+  for (const [stopId, map] of Object.entries(stopRoutesMap)) {
+    stopRoutesFinal[stopId] = [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([route, headsign]) => ({ route, headsign }))
+  }
+
   mkdirSync(OUT_DIR, { recursive: true })
   writeFileSync(join(OUT_DIR, 'gtfs-stops.json'), JSON.stringify(stopsMap))
   writeFileSync(join(OUT_DIR, 'gtfs-directions.json'), JSON.stringify(directionsMap))
   writeFileSync(join(OUT_DIR, 'gtfs-shapes.json'), JSON.stringify(shapesMap))
+  writeFileSync(join(OUT_DIR, 'gtfs-stop-routes.json'), JSON.stringify(stopRoutesFinal))
 
   console.log(`✓ ${Object.keys(stopsMap).length} stops`)
   console.log(`✓ ${Object.keys(directionsMap).length} route-direction pairs`)
   console.log(`✓ ${Object.keys(shapesMap).length} route shapes`)
-  console.log('Wrote public/gtfs-stops.json, gtfs-directions.json, gtfs-shapes.json')
+  console.log(`✓ ${Object.keys(stopRoutesFinal).length} stops with route mappings`)
+  console.log('Wrote public/gtfs-stops.json, gtfs-directions.json, gtfs-shapes.json, gtfs-stop-routes.json')
 }
 
 main().catch(err => { console.error(err.message); process.exit(1) })

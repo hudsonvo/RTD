@@ -2,7 +2,7 @@ const ENDPOINT = '/api/otp/otp/gtfs/v1'
 
 const LEG_FIELDS = `
   legs {
-    mode duration distance
+    mode duration distance startTime endTime
     from { name lat lon }
     to   { name lat lon }
     route { shortName longName color }
@@ -98,10 +98,17 @@ export async function planTrip({ fromLat, fromLon, toLat, toLon, numItineraries 
 
 // Plans drive (origin→P&R) + transit (P&R→destination) as two OTP calls and
 // merges the legs into one combined itinerary.
-export async function planCombinedDriveTransit({ fromLat, fromLon, prLat, prLon, toLat, toLon, dateTime, arriveBy }) {
+// prLat/prLon        = parking lot visual coordinates (map marker)
+// driveToLat/Lon     = road-accessible drive destination; falls back to prLat/prLon
+// transitLat/Lon     = transit stop coordinates (transit origin); falls back to driveToLat/Lon
+export async function planCombinedDriveTransit({ fromLat, fromLon, prLat, prLon, driveToLat, driveToLon, transitLat, transitLon, toLat, toLon, dateTime, arriveBy }) {
+  const dLat = driveToLat ?? prLat
+  const dLon = driveToLon ?? prLon
+  const tLat = transitLat ?? dLat
+  const tLon = transitLon ?? dLon
   const [driveItins, transitItins] = await Promise.all([
-    planTrip({ fromLat, fromLon, toLat: prLat, toLon: prLon, numItineraries: 1, transportModes: DRIVE_ONLY_MODES }),
-    planTrip({ fromLat: prLat, fromLon: prLon, toLat, toLon, numItineraries: 1, dateTime, arriveBy }),
+    planTrip({ fromLat, fromLon, toLat: dLat, toLon: dLon, numItineraries: 1, transportModes: DRIVE_ONLY_MODES }),
+    planTrip({ fromLat: tLat, fromLon: tLon, toLat, toLon, numItineraries: 1, dateTime, arriveBy }),
   ])
 
   const driveF   = formatItinerary(driveItins[0],   'drive-leg')
@@ -162,14 +169,16 @@ export function formatItinerary(itin, id) {
       const shortName = leg.route?.shortName ?? ''
       const color     = leg.route?.color ? `#${leg.route.color}` : null
       const modeToType = { BUS: 'bus', TRAM: 'light-rail', RAIL: 'commuter-rail', SUBWAY: 'light-rail' }
+      const departureMs = leg.startTime ?? null
       return {
         type: 'transit',
-        routeId:    shortName,
-        routeColor: color,
-        routeType:  modeToType[leg.mode] ?? 'bus',
-        desc:       `${shortName || leg.mode} toward ${toName ?? 'destination'}`,
-        stops:      leg.intermediateStops?.length ?? 0,
-        time:       `${dMin} min`,
+        routeId:      shortName,
+        routeColor:   color,
+        routeType:    modeToType[leg.mode] ?? 'bus',
+        desc:         `${shortName || leg.mode} toward ${toName ?? 'destination'}`,
+        stops:        leg.intermediateStops?.length ?? 0,
+        time:         `${dMin} min`,
+        departureMs,
         fromName, toName,
         geometry, fromCoords, toCoords,
       }

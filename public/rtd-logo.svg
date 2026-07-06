@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 46" fill="none">
+  <!-- Outer shape: left-rect + right D-curve -->
+  <path d="M4 0 H70 A23 23 0 0 1 70 46 H4 A4 4 0 0 1 0 42 V4 A4 4 0 0 1 4 0Z" fill="#CC0000"/>
+  <!-- R -->
+  <path d="M9 10 H9 V36 H14 V28 H18 L23 36 H29 L23 27 C26 25 28 22 28 18 C28 13.5 24.5 10 20 10 Z M14 15 H19 C21 15 23 16.5 23 18.5 C23 20.5 21 22 19 22 H14 Z" fill="white"/>
+  <!-- T -->
+  <path d="M32 10 H52 V15 H45 V36 H39 V15 H32 Z" fill="white"/>
+  <!-- D -->
+  <path d="M56 10 H64 C72 10 78 16 78 23 C78 30 72 36 64 36 H56 Z M61 15 V31 H63 C68.5 31 73 27.5 73 23 C73 18.5 68.5 15 63 15 Z" fill="white"/>
+</svg>

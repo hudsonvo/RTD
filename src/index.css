@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+@theme {
+  --color-blue-50:  #fff5f5;
+  --color-blue-100: #ffe0e0;
+  --color-blue-200: #ffbdbd;
+  --color-blue-300: #ff8080;
+  --color-blue-400: #ee4444;
+  --color-blue-500: #dd0000;
+  --color-blue-600: #cc0000;
+  --color-blue-700: #aa0000;
+  --color-blue-800: #880000;
+  --color-blue-900: #660000;
+}
+
 * {
   box-sizing: border-box;
 }

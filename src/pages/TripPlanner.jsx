@@ -6,7 +6,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { ROUTES, PARK_AND_RIDE, POPULAR_LOCATIONS } from '../data/mockData'
+import { ROUTES, PARK_AND_RIDE } from '../data/mockData'
 import { planTrip, planCombinedDriveTransit, formatItinerary } from '../api/otp'
 
 const ROUTE_TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
@@ -41,7 +41,7 @@ function getSuggestedParkAndRides(fromLat, fromLon, toLat, toLon) {
       const detourRatio = (driveDist + transitDist) / directDist
       return { ...pr, driveDist, detourRatio }
     })
-    .filter(pr => pr.detourRatio <= 1.4 && pr.driveDist < directDist)
+    .filter(pr => pr.detourRatio <= 2.5 && pr.driveDist < directDist * 1.5)
     .sort((a, b) => a.detourRatio - b.detourRatio)
     .slice(0, 4)
 }
@@ -143,6 +143,14 @@ function AddressInput({ value, onChange, onSelect, placeholder, pinColor, onClea
 
 // ── TripLeg ────────────────────────────────────────────────────────────────────
 
+function boardingEta(departureMs) {
+  if (!departureMs) return null
+  const diffMin = Math.round((departureMs - Date.now()) / 60000)
+  if (diffMin <= 0) return 'Now'
+  if (diffMin < 60) return `${diffMin} min`
+  return new Date(departureMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
 function TripLeg({ leg, isLast }) {
   const knownRoute = leg.routeId ? ROUTES.find(r => r.id === leg.routeId || r.shortName === leg.routeId) : null
   const color = leg.routeColor || knownRoute?.color || '#3B82F6'
@@ -153,6 +161,11 @@ function TripLeg({ leg, isLast }) {
   if (leg.type === 'drive') { iconBg = '#374151'; Icon = Car }
   else if (leg.type === 'park') { iconBg = '#6366F1'; Icon = ParkingSquare }
   else if (leg.type === 'transit') { iconBg = color; Icon = TransitIcon }
+
+  const eta = leg.type === 'transit' ? boardingEta(leg.departureMs) : null
+  const boardTime = leg.departureMs
+    ? new Date(leg.departureMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null
 
   return (
     <div className="flex gap-3">
@@ -175,6 +188,26 @@ function TripLeg({ leg, isLast }) {
           </div>
           <span className="text-xs text-gray-400 shrink-0">{leg.time}</span>
         </div>
+        {leg.type === 'transit' && (leg.fromName || boardTime) && (
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {leg.fromName && (
+              <span className="text-xs text-gray-400 truncate">{leg.fromName}</span>
+            )}
+            {boardTime && (
+              <>
+                {leg.fromName && <span className="text-gray-300 text-xs">·</span>}
+                <span className="text-xs font-medium text-gray-600">{boardTime}</span>
+                {eta && (
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                    eta === 'Now' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-50 text-blue-600'
+                  }`}>
+                    {eta === 'Now' ? 'Now' : `in ${eta}`}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -523,28 +556,23 @@ function DriveTransitPanel({ fromCoords, toCoords, selectedPR, onSelectPR, onPla
         />
         <FitBounds key={fitKey} points={fitPoints} />
 
-        {/* Selectable P&R markers — hidden once route is shown */}
-        {!trip && stations.map(s => (
-          <PRSelectMarker
-            key={`${s.id}-${selectedPR?.id === s.id}`}
-            station={s}
-            isSelected={selectedPR?.id === s.id}
-            onSelect={() => onSelectPR(s)}
-          />
-        ))}
-
-        {/* Route polylines + P&R landmark once planned */}
+        {/* Route polylines once planned */}
         {trip && (
           <>
             <TripLegs trip={trip} selected onSelect={null} />
             <TransferMarkers trip={trip} />
-            {selectedPR && (
-              <Marker position={[selectedPR.lat, selectedPR.lon]} icon={PR_ICON}>
-                <Popup>{selectedPR.name}</Popup>
-              </Marker>
-            )}
           </>
         )}
+
+        {/* P&R markers — always visible so user can switch stations */}
+        {stations.map(s => (
+          <PRSelectMarker
+            key={`${s.id}-${selectedPR?.id === s.id}`}
+            station={s}
+            isSelected={selectedPR?.id === s.id}
+            onSelect={() => trip && s.id !== selectedPR?.id ? onPlanVia(s) : onSelectPR(s)}
+          />
+        ))}
 
         {fromCoords && (
           <Marker position={[fromCoords.lat, fromCoords.lon]} icon={ORIGIN_ICON}>
@@ -668,6 +696,7 @@ export default function TripPlanner() {
   const [fromCoords, setFromCoords] = useState(null)
   const [to, setTo] = useState('')
   const [toCoords, setToCoords] = useState(null)
+  const [waypoints, setWaypoints] = useState([])  // [{ value, coords }]
   const [mode, setMode] = useState('transit')
   const [timeMode, setTimeMode] = useState('now')
   const [datetime, setDatetime] = useState(() => {
@@ -680,6 +709,22 @@ export default function TripPlanner() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selectedPR, setSelectedPR] = useState(null)
+
+  function addWaypoint() {
+    setWaypoints(prev => [...prev, { value: '', coords: null }])
+    setTrips(null)
+  }
+  function removeWaypoint(i) {
+    setWaypoints(prev => prev.filter((_, idx) => idx !== i))
+    setTrips(null)
+  }
+  function updateWaypointValue(i, v) {
+    setWaypoints(prev => prev.map((wp, idx) => idx === i ? { ...wp, value: v, coords: null } : wp))
+    setTrips(null)
+  }
+  function updateWaypointCoords(i, coords) {
+    setWaypoints(prev => prev.map((wp, idx) => idx === i ? { ...wp, coords } : wp))
+  }
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -709,11 +754,47 @@ export default function TripPlanner() {
         const result = await planCombinedDriveTransit({
           fromLat: fCoords.lat, fromLon: fCoords.lon,
           prLat: selectedPR.lat, prLon: selectedPR.lon,
+          driveToLat: selectedPR.driveToLat, driveToLon: selectedPR.driveToLon,
+          transitLat: selectedPR.transitLat, transitLon: selectedPR.transitLon,
           toLat: tCoords.lat, toLon: tCoords.lon,
           dateTime: timeMode === 'now' ? null : datetime,
           arriveBy: timeMode === 'arrive-by',
         })
         setTrips(result)
+      } else if (waypoints.length > 0) {
+        // Resolve any waypoint coords that weren't picked from the dropdown
+        const wpCoords = []
+        for (let i = 0; i < waypoints.length; i++) {
+          const wp = waypoints[i]
+          if (wp.coords) {
+            wpCoords.push(wp.coords)
+          } else {
+            if (!wp.value.trim()) throw new Error(`Stop ${i + 1} is empty — enter an address or remove it`)
+            const results = await geocode(wp.value)
+            if (!results.length) throw new Error(`Could not find location: "${wp.value}"`)
+            updateWaypointCoords(i, results[0])
+            wpCoords.push(results[0])
+          }
+        }
+
+        // Plan each segment independently (no dateTime chaining to stay compatible with all OTP versions)
+        const allPoints = [fCoords, ...wpCoords, tCoords]
+        const rawSegs = []
+        for (let i = 0; i < allPoints.length - 1; i++) {
+          const segItins = await planTrip({
+            fromLat: allPoints[i].lat, fromLon: allPoints[i].lon,
+            toLat: allPoints[i + 1].lat, toLon: allPoints[i + 1].lon,
+            numItineraries: 1,
+          })
+          rawSegs.push(segItins[0])
+        }
+
+        const allLegs = rawSegs.flatMap((seg, i) => formatItinerary(seg, i).legs)
+        const totalMin = Math.round(rawSegs.reduce((s, seg) => s + seg.duration, 0) / 60)
+        const departure = new Date(rawSegs[0].startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        const arrival   = new Date(rawSegs[rawSegs.length - 1].endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        setTrips([{ id: 0, duration: `${totalMin} min`, departure, arrival, legs: allLegs }])
+        setSelectedTripIndex(0)
       } else {
         const itineraries = await planTrip({
           fromLat: fCoords.lat, fromLon: fCoords.lon,
@@ -762,6 +843,8 @@ export default function TripPlanner() {
       const result = await planCombinedDriveTransit({
         fromLat: fCoords.lat, fromLon: fCoords.lon,
         prLat: pr.lat, prLon: pr.lon,
+        driveToLat: pr.driveToLat, driveToLon: pr.driveToLon,
+        transitLat: pr.transitLat, transitLon: pr.transitLon,
         toLat: tCoords.lat, toLon: tCoords.lon,
         dateTime: timeMode === 'now' ? null : datetime,
         arriveBy: timeMode === 'arrive-by',
@@ -809,37 +892,7 @@ export default function TripPlanner() {
           ))}
         </div>
 
-        {/* Origin / destination */}
-        <div className="flex gap-2">
-          <div className="flex-1 space-y-2">
-            <AddressInput
-              value={from}
-              onChange={v => { setFrom(v); setFromCoords(null); setTrips(null) }}
-              onSelect={s => setFromCoords(s)}
-              onClear={() => { setFrom(''); setFromCoords(null); setTrips(null) }}
-              placeholder="From: address or stop name"
-              pinColor="text-emerald-500"
-            />
-            <AddressInput
-              value={to}
-              onChange={v => { setTo(v); setToCoords(null); setTrips(null) }}
-              onSelect={s => setToCoords(s)}
-              onClear={() => { setTo(''); setToCoords(null); setTrips(null) }}
-              placeholder="To: address or stop name"
-              pinColor="text-red-500"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleSwap}
-            className="self-center p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
-            title="Swap"
-          >
-            <RotateCcw size={16} />
-          </button>
-        </div>
-
-        {/* Time selector + search */}
+        {/* Time selector */}
         <div className="flex gap-2 items-center flex-wrap">
           <div className="flex rounded-xl bg-gray-100 p-0.5 shrink-0">
             {TIME_MODES.map(m => (
@@ -865,33 +918,84 @@ export default function TripPlanner() {
               className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
             />
           )}
-          <button
-            type="submit"
-            disabled={!from || !to || loading || (mode === 'drive-transit' && fromCoords && toCoords && !selectedPR)}
-            className="ml-auto px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            {loading ? 'Searching…'
-              : mode === 'drive-transit' && selectedPR ? 'Plan Route'
-              : 'Search'}
-          </button>
         </div>
 
-        {/* Popular destinations */}
-        <div>
-          <p className="text-xs text-gray-400 mb-1.5">Popular destinations</p>
-          <div className="flex flex-wrap gap-1.5">
-            {POPULAR_LOCATIONS.slice(0, 4).map(loc => (
-              <button
-                key={loc.name}
-                type="button"
-                onClick={() => { setTo(loc.address); setToCoords(null); setTrips(null) }}
-                className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 font-medium transition-colors"
-              >
-                {loc.name}
-              </button>
-            ))}
+        {/* Origin / destination */}
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <AddressInput
+              value={from}
+              onChange={v => { setFrom(v); setFromCoords(null); setTrips(null) }}
+              onSelect={s => setFromCoords(s)}
+              onClear={() => { setFrom(''); setFromCoords(null); setTrips(null) }}
+              placeholder="From: address or stop name"
+              pinColor="text-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={handleSwap}
+              className="shrink-0 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors"
+              title="Swap origin and destination"
+            >
+              <RotateCcw size={16} />
+            </button>
           </div>
+
+          {/* Waypoints — transit mode only */}
+          {mode !== 'drive-transit' && waypoints.map((wp, i) => (
+            <div key={i} className="flex gap-2">
+              <AddressInput
+                value={wp.value}
+                onChange={v => updateWaypointValue(i, v)}
+                onSelect={s => updateWaypointCoords(i, s)}
+                onClear={() => updateWaypointValue(i, '')}
+                placeholder="Via: intermediate stop or address"
+                pinColor="text-blue-400"
+              />
+              <button
+                type="button"
+                onClick={() => removeWaypoint(i)}
+                className="shrink-0 p-2 rounded-xl bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                title="Remove stop"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+
+          <AddressInput
+            value={to}
+            onChange={v => { setTo(v); setToCoords(null); setTrips(null) }}
+            onSelect={s => setToCoords(s)}
+            onClear={() => { setTo(''); setToCoords(null); setTrips(null) }}
+            placeholder="To: address or stop name"
+            pinColor="text-red-500"
+          />
+
+          {/* Add stop button — transit mode only */}
+          {mode !== 'drive-transit' && (
+            <button
+              type="button"
+              onClick={addWaypoint}
+              className="flex items-center gap-1.5 px-2 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <span className="text-base font-bold leading-none">+</span>
+              Add stop
+            </button>
+          )}
         </div>
+
+        {/* Search */}
+        <button
+          type="submit"
+          disabled={!from || !to || loading || (mode === 'drive-transit' && fromCoords && toCoords && !selectedPR)}
+          className="w-full px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Searching…'
+            : mode === 'drive-transit' && selectedPR ? 'Plan Route'
+            : 'Search'}
+        </button>
+
       </form>
 
       {/* Drive+Transit: unified station picker + map */}

@@ -7,7 +7,7 @@ import {
   Loader, MapPin, ArrowRight, Search, X, List, ChevronDown, Clock,
 } from 'lucide-react'
 import { useVehiclePositions, useArrivalsAtStop } from '../hooks/useRTDFeeds'
-import { getShapes, getStops } from '../api/gtfsStatic'
+import { getShapes, getStops } from '../api/gtfs'
 import { VEHICLES as MOCK_VEHICLES, ROUTES } from '../data/mockData'
 
 const TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
