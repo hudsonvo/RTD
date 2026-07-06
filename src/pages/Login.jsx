@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Bus, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
@@ -35,9 +35,7 @@ export default function Login() {
 
         {/* Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-[#003DA5] text-white p-3 rounded-2xl mb-3">
-            <Bus size={28} />
-          </div>
+          <img src="/rtd_logo.png" alt="RTD" className="h-12 mb-1" />
           <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
           <p className="text-gray-400 text-sm mt-1">Sign in to your RTD account</p>
         </div>
@@ -99,7 +97,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !email || !password}
-              className="w-full py-2.5 bg-[#003DA5] text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
+              className="w-full py-2.5 bg-[#CC0000] text-white rounded-xl text-sm font-semibold hover:bg-[#AA0000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

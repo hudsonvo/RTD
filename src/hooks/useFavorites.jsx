@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useContext, createContext } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 const LS_KEY = 'rtd-favorites'
 const TOKEN_KEY = 'rtd_token'
+
+const FavoritesContext = createContext(null)
 
 function loadFromStorage() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') }
@@ -23,18 +25,15 @@ async function apiFetch(path, options = {}) {
   return res.json()
 }
 
-// { type: 'stop'|'route', id: string, name: string }
-export function useFavorites() {
+export function FavoritesProvider({ children }) {
   const { user } = useAuth()
   const [favorites, setFavorites] = useState([])
 
-  // Reload favorites whenever auth state changes
   useEffect(() => {
     if (!user) {
       setFavorites(loadFromStorage())
       return
     }
-
     apiFetch('/api/favorites')
       .then(data => {
         if (data?.favorites) {
@@ -78,5 +77,15 @@ export function useFavorites() {
     [favorites]
   )
 
-  return { favorites, toggle, isFavorite }
+  return (
+    <FavoritesContext.Provider value={{ favorites, toggle, isFavorite }}>
+      {children}
+    </FavoritesContext.Provider>
+  )
+}
+
+const EMPTY = { favorites: [], toggle: () => {}, isFavorite: () => false }
+
+export function useFavorites() {
+  return useContext(FavoritesContext) ?? EMPTY
 }

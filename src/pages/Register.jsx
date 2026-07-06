@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bus, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, AlertCircle, User } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Register() {
   const { register } = useAuth()
   const navigate = useNavigate()
 
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -27,7 +28,7 @@ export default function Register() {
     setError(null)
     setLoading(true)
     try {
-      await register(email.trim().toLowerCase(), password)
+      await register(email.trim().toLowerCase(), password, name.trim() || null)
       navigate('/', { replace: true })
     } catch (err) {
       setError(err.message)
@@ -44,9 +45,7 @@ export default function Register() {
 
         {/* Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-[#003DA5] text-white p-3 rounded-2xl mb-3">
-            <Bus size={28} />
-          </div>
+          <img src="/rtd_logo.png" alt="RTD" className="h-12 mb-1" />
           <h1 className="text-2xl font-bold text-gray-900">Create an account</h1>
           <p className="text-gray-400 text-sm mt-1">Save favorites and personalize your experience</p>
         </div>
@@ -60,6 +59,24 @@ export default function Register() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Name */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Name
+              </label>
+              <div className="relative">
+                <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Your name"
+                  autoComplete="name"
+                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                />
+              </div>
+            </div>
+
             {/* Email */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -138,7 +155,7 @@ export default function Register() {
             <button
               type="submit"
               disabled={loading || !email || !password || !confirm}
-              className="w-full py-2.5 bg-[#003DA5] text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
+              className="w-full py-2.5 bg-[#CC0000] text-white rounded-xl text-sm font-semibold hover:bg-[#AA0000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-1"
             >
               {loading ? 'Creating account…' : 'Create account'}
             </button>

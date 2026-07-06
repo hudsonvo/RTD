@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchVehiclePositions, fetchTripDelays, fetchAlerts, fetchArrivalsAtStop } from '../api/rtdFeeds'
-import { getStops, getDirections, resolveStopName, resolveHeadsign, findNearbyStops } from '../api/gtfsStatic'
+import { fetchVehiclePositions, fetchTripDelays, fetchAlerts, fetchArrivalsAtStop, getStops, getDirections, resolveStopName, resolveHeadsign, findNearbyStops } from '../api/gtfs'
 
 function usePoll(fetcher, interval) {
   const [data, setData] = useState(null)

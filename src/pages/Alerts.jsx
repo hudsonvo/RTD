@@ -93,7 +93,6 @@ export default function Alerts() {
 
   const warnings = alerts.filter(a => a.severity === 'warning')
   const infos = alerts.filter(a => a.severity === 'info')
-  const resolved = alerts.filter(a => a.severity === 'success')
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
@@ -134,9 +133,8 @@ export default function Alerts() {
       {/* Summary counts */}
       <div className="bg-white rounded-2xl shadow-sm px-6 py-4 flex gap-8">
         {[
-          { label: 'Warnings', count: warnings.length, color: 'text-yellow-500' },
           { label: 'Notices', count: infos.length, color: 'text-blue-500' },
-          { label: 'Resolved', count: resolved.length, color: 'text-emerald-500' },
+          { label: 'Warnings', count: warnings.length, color: 'text-yellow-500' },
         ].map(({ label, count, color }) => (
           <div key={label}>
             <div className={`text-3xl font-bold ${color}`}>{count}</div>

@@ -1,26 +1,28 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Bus, Train, Zap, MapPin, ChevronDown, ChevronUp } from 'lucide-react'
+import { Bus, Train, MapPin, ChevronDown, ChevronUp, Star } from 'lucide-react'
 import { ROUTES, STOPS } from '../data/mockData'
+import { useFavorites } from '../hooks/useFavorites'
 
-const TYPE_ICON = { bus: Bus, 'light-rail': Train, 'commuter-rail': Train, 'bus-rapid-transit': Zap }
-const TYPE_LABEL = {
-  bus: 'Bus',
-  'light-rail': 'Light Rail',
-  'commuter-rail': 'Commuter Rail',
-  'bus-rapid-transit': 'Bus Rapid Transit',
+const TYPE_ICON = { bus: Bus, train: Train }
+const TYPE_LABEL = { bus: 'Bus', train: 'Train' }
+const FILTERS = ['all', 'bus', 'train']
+
+function normalizeType(type) {
+  if (type === 'light-rail' || type === 'commuter-rail') return 'train'
+  if (type === 'bus-rapid-transit') return 'bus'
+  return type
 }
-
-const FILTERS = ['all', 'bus', 'light-rail']
 
 export default function Routes() {
   const [searchParams] = useSearchParams()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState(searchParams.get('id') || null)
+  const { isFavorite, toggle } = useFavorites()
 
   const filtered = ROUTES.filter(r => {
-    const matchType = filter === 'all' || r.type === filter
+    const matchType = filter === 'all' || normalizeType(r.type) === filter
     const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) ||
       r.description.toLowerCase().includes(search.toLowerCase()) ||
       r.shortName.toLowerCase().includes(search.toLowerCase())
@@ -66,24 +68,26 @@ export default function Routes() {
       ) : (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           {filtered.map((route, idx) => {
-            const Icon = TYPE_ICON[route.type] || Bus
+            const Icon = TYPE_ICON[normalizeType(route.type)] || Bus
             const isExpanded = expanded === route.id
             const routeStops = STOPS.filter(s => s.routes.includes(route.id))
 
+            const fav = isFavorite('route', route.id)
             return (
               <div key={route.id} className={idx > 0 ? 'border-t border-gray-100' : ''}>
-                <button
-                  className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors text-left"
-                  onClick={() => setExpanded(isExpanded ? null : route.id)}
-                >
+                <div className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
                   {/* Route color circle */}
                   <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 cursor-pointer"
                     style={{ backgroundColor: route.color }}
+                    onClick={() => setExpanded(isExpanded ? null : route.id)}
                   >
                     <Icon size={17} />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => setExpanded(isExpanded ? null : route.id)}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-900">{route.name}</span>
                       {route.isFree && (
@@ -93,13 +97,25 @@ export default function Routes() {
                     <div className="text-sm text-gray-400 truncate">{route.description}</div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-gray-400 hidden sm:block">{TYPE_LABEL[route.type]}</span>
-                    {isExpanded
-                      ? <ChevronUp size={15} className="text-gray-400" />
-                      : <ChevronDown size={15} className="text-gray-400" />
-                    }
+                    <span className="text-xs text-gray-400 hidden sm:block">{TYPE_LABEL[normalizeType(route.type)]}</span>
+                    <button
+                      onClick={() => toggle({ type: 'route', id: route.id, name: route.name })}
+                      className={`p-1.5 rounded-lg transition-colors ${fav ? 'text-yellow-500 hover:text-yellow-600' : 'text-gray-300 hover:text-gray-400'}`}
+                      title={fav ? 'Remove from favorites' : 'Add to favorites'}
+                    >
+                      <Star size={15} fill={fav ? 'currentColor' : 'none'} />
+                    </button>
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => setExpanded(isExpanded ? null : route.id)}
+                    >
+                      {isExpanded
+                        ? <ChevronUp size={15} className="text-gray-400" />
+                        : <ChevronDown size={15} className="text-gray-400" />
+                      }
+                    </div>
                   </div>
-                </button>
+                </div>
 
                 {isExpanded && (
                   <div className="border-t border-gray-100 px-4 py-4 bg-gray-50">
